@@ -1,0 +1,66 @@
+{
+  "created": "2026-09-16T00:37:01.484Z",
+  "source": {
+    "url": "https://github.com/shinchiro/mpv-winbuild-cmake/releases/download/20260903/mpv-x86_64-20260903-git-69e63f425a.7z",
+    "release": "20260903",
+    "assetDigest": "sha256:418dbfb5feb851cbed33d6c05d8481ba71802621bfd6efe8974522b28d42ac97",
+    "sha256": "418dbfb5feb851cbed33d6c05d8481ba71802621bfd6efe8974522b28d42ac97",
+    "bytes": 33768341
+  },
+  "binaries": [
+    {
+      "name": "mpv.exe",
+      "sha256": "4a0bc712bc98e6f80cd980930b74b6ac202b8ccf2041e887adab69906f82731c",
+      "source": "https://github.com/shinchiro/mpv-winbuild-cmake/releases/download/20260903/mpv-x86_64-20260903-git-69e63f425a.7z"
+    },
+    {
+      "name": "mpv.com",
+      "sha256": "7f9e0097ebbe261ca00a6a00f4494f3d6d5fbeece6b38247867d59d15aabf81a",
+      "source": "https://github.com/shinchiro/mpv-winbuild-cmake/releases/download/20260903/mpv-x86_64-20260903-git-69e63f425a.7z"
+    },
+    {
+      "name": "d3dcompiler_43.dll",
+      "sha256": "4b074a3976399dc735484f5d43d04b519b7bdee8ac719d9ab8ed6bd4e6be0345",
+      "source": "https://github.com/shinchiro/mpv-winbuild-cmake/releases/download/20260903/mpv-x86_64-20260903-git-69e63f425a.7z"
+    }
+  ],
+  "version": "mpv v0.41.0-1023-g69e63f425 Copyright © 2000-2026 mpv/MPlayer/mplayer2 projects\r\n built on Sep  3 2026 00:30:53\r\nlibplacebo version: v7.371.0 (v7.360.0-120-g86bbd5d-dirty)\r\nFFmpeg version: N-126390-g9fc8c785e\r\nFFmpeg library versions:\r\n   libavcodec      63.9.100\r\n   libavdevice     63.2.100\r\n   libavfilter     12.4.100\r\n   libavformat     63.6.100\r\n   libavutil       61.6.100\r\n   libswresample   7.2.100\r\n   libswscale      10.2.100\r\n",
+  "materials": [
+    {
+      "name": "mpv-Copyright.txt",
+      "url": "https://raw.githubusercontent.com/mpv-player/mpv/69e63f425a/Copyright",
+      "sha256": "bfe9ee4cceabcb8ecbfadf208d04156f73d801e6a57369a5606bb8341e204a23"
+    },
+    {
+      "name": "mpv-LICENSE.GPL.txt",
+      "url": "https://raw.githubusercontent.com/mpv-player/mpv/69e63f425a/LICENSE.GPL",
+      "sha256": "edaef632cbb643e4e7a221717a6c441a4c1a7c918e6e4d56debc3d8739b233f6"
+    },
+    {
+      "name": "mpv-LICENSE.LGPL.txt",
+      "url": "https://raw.githubusercontent.com/mpv-player/mpv/69e63f425a/LICENSE.LGPL",
+      "sha256": "72b672113d642cbb8ef5dcc76938db801983c56e50b1400ab930f1a64d6dc8d9"
+    },
+    {
+      "name": "mpv-source-69e63f425a.zip",
+      "url": "https://codeload.github.com/mpv-player/mpv/zip/69e63f425a",
+      "sha256": "9c0ed1fe390773edc34ae375e3bc2e763f75acfc54e161e10c7c953dca722ce3"
+    },
+    {
+      "name": "mpv-build-scripts-cd1edc11.zip",
+      "url": "https://codeload.github.com/shinchiro/mpv-winbuild-cmake/zip/cd1edc11dc6887a50f705717619d879f5a93a488",
+      "sha256": "770882870fd2d66411150947777147e8c7ebaa5b8b6e980b7643b79b7bc4a989"
+    },
+    {
+      "name": "mpv-ffmpeg-source-9fc8c785e.zip",
+      "url": "https://codeload.github.com/FFmpeg/FFmpeg/zip/9fc8c785e",
+      "sha256": "4f9999490fcb5464173babac5ca0774e5be540c982daefcee2437cbe32b3132f"
+    }
+  ],
+  "limitations": [
+    "Exact full static dependency revisions unavailable: upstream workflow log artifact expired.",
+    "libplacebo reports dirty build; uncommitted patch provenance not supplied.",
+    "Not a claim of complete corresponding source or public redistribution clearance.",
+    "d3dcompiler_43.dll redistribution terms still require upstream documentation."
+  ]
+}

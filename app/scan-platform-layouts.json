@@ -1,0 +1,17 @@
+{
+  "schema": 1,
+  "layouts": [
+    {
+      "id": "epic-launcher-installation",
+      "entry": "Portal/Binaries/Win32/EpicGamesLauncher.exe",
+      "directories": ["Portal/Config", "Portal/Content", "Engine"],
+      "owned": ["Portal", "Engine"]
+    },
+    {
+      "id": "epic-launcher-installation-x64",
+      "entry": "Portal/Binaries/Win64/EpicGamesLauncher.exe",
+      "directories": ["Portal/Config", "Portal/Content", "Engine"],
+      "owned": ["Portal", "Engine"]
+    }
+  ]
+}

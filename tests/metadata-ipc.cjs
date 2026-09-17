@@ -1,0 +1,13 @@
+const appModule=require('./app-module.cjs');
+// Simulated provider responses; real IPC handlers and persistence contracts.
+const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),os=require('node:os');
+test('歌曲资料由歌曲发起，锁定/手填字段保留，迟到响应不写入另一音轨',async()=>{
+ const file=appModule.resolve('audio-providers'),old=require.cache[file],queries=[];let pending;
+ require.cache[file]={exports:{create:()=>({search:async(item)=>{queries.push(item);return [{id:'chosen',provider:'deezer'}];},detail:async()=>pending?await pending:{provider:'deezer',source:'测试资料源',artists:['联网艺术家'],duration:42},cover:async()=>'',lyrics:async()=>({kind:'plain',text:'模拟歌词',source:'模拟源'})})}};
+ try{const root=fs.mkdtempSync(path.join(os.tmpdir(),'um-metadata-ipc-')),handlers=new Map(),events=new Map(),sent=[],event={sender:{id:1,isDestroyed:()=>false,send:(...v)=>sent.push(v)}};let library={items:[{id:'album',name:'不能用这个专辑名查单曲',type:'audio',audio:{kind:'music',artists:[],tracks:[{id:'track',title:'目标歌曲',artists:['手填艺术家'],durationSeconds:0,lockedFields:['durationSeconds'],sourceRefs:[]}],sources:[]}}],categories:[]};let saves=0;
+ appModule('audio-extras').create({ipcMain:{handle:(c,f)=>handlers.set(c,f),on:(c,f)=>events.set(c,f)},dataRoot:()=>root,safeStorage:{},loadLibrary:()=>structuredClone(library),saveLibrary:v=>{saves++;library=v;return v;},coverStore:{},dialog:{},windowFor:()=>null,disguised:()=>false});
+ const call=(channel,...args)=>handlers.get('audio:'+channel)(event,...args);await call('setPreferences',{online:true,chinese:true});await call('searchTrack','album','track');assert.equal(queries[0].name,'目标歌曲');assert.equal(queries[0].audio.collectionKind,'single');await call('applyTrackMetadata','album','track','chosen');assert.deepEqual(library.items[0].audio.tracks[0].artists,['手填艺术家']);assert.equal(library.items[0].audio.tracks[0].durationSeconds,0);assert.equal(library.items[0].audio.tracks[0].metadataSource,'测试资料源');
+ await call('searchTrack','album','track');let release;pending=new Promise(r=>release=r);const attempt=call('applyTrackMetadata','album','track','chosen');library.items[0].audio.tracks[0].title='用户刚刚修改';release({provider:'deezer',artists:['迟到'],duration:99});await assert.rejects(attempt,/已修改/);assert.equal(saves,1);
+ const results=await call('completeLyrics','album',['track']);assert.equal(results[0].status,'plain');assert.equal(sent.length,1);const count=fs.readdirSync(path.join(root,'audio-lyrics')).length;assert.equal(count,1);await call('setPreferences',{online:false});await assert.rejects(call('completeLyrics','album',['track']),/允许声音联网/);
+ }finally{if(old)require.cache[file]=old;else delete require.cache[file];}
+});

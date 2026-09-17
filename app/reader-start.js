@@ -1,0 +1,5 @@
+$('minimizeBtn').onclick=()=>native.minimize();$('maximizeBtn').onclick=()=>native.toggleMaximize();$('closeBtn').onclick=()=>native.close();
+native.onReaderActivate(id=>openMedia(id).catch(e=>readerNotice(e.message)));
+let readerResizeTimer;window.addEventListener('resize',()=>{clearTimeout(readerResizeTimer);readerResizeTimer=setTimeout(()=>mediaSession?.controller?.resize?.(),120);});
+native.onWindowState(v=>{$('maximizeBtn').innerHTML=v.maximized?'<svg viewBox="0 0 16 16"><path d="M6 3h7v7M3 6h7v7H3z"/></svg>':'<svg viewBox="0 0 16 16"><rect x="3" y="3" width="10" height="10"/></svg>';$('maximizeBtn').setAttribute('aria-label',v.maximized?'还原':'最大化');});
+native.onReaderAppearance(readerAppearance);native.readerInit().then(async data=>{readerAppearance(data.appearance);await openMedia(data.id);if($('readerBack')){$('readerBack').textContent='关闭阅读窗口';$('readerBack').onclick=()=>native.close();}}).catch(e=>{const p=document.createElement('p');p.textContent='无法打开：'+e.message;document.body.appendChild(p);});

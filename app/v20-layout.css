@@ -1,0 +1,67 @@
+/* Compact fixed controls; the resource count stays visible without a repeated page title. */
+#libraryEyebrow { display:none; }
+#libraryHeading { display:flex; align-items:baseline; gap:6px; margin:0; white-space:nowrap; padding:5px 12px; border-left:2px solid var(--accent); background:color-mix(in srgb,var(--accent) 5%,transparent); border-radius:5px; }
+#resultCount { font-size:23px; font-weight:650; color:var(--text); margin:0; }
+.resource-count-unit { font-size:11px; color:var(--muted); font-weight:400; }
+.content:has(#libraryView:not(.hidden)) { padding-top:20px; }
+.content:has(#libraryView:not(.hidden)) #librarySearchHeader { margin-bottom:10px; gap:14px; justify-content:flex-start; }
+#libraryView>.library-toolbar { margin-bottom:12px; }
+#libraryView>.library-toolbar>div:first-child { display:none; }
+#libraryView .toolbar-actions { width:100%; justify-content:flex-end; }
+.content:has(#categoriesView:not(.hidden)) { display:flex; overflow:hidden; flex-direction:column; padding-top:20px; }
+#categoriesView:not(.hidden) { display:flex; flex-direction:column; flex:1; min-height:0; }
+#categoriesView>.library-toolbar { margin-bottom:10px; flex:none; }
+#categoriesView .eyebrow,#categoriesView .section-subtitle,.tag-selection-hint { display:none; }
+#categoriesView .tag-tools { flex:none; margin-bottom:8px; }
+#tagSelectionTools { flex:none; padding:0; margin:0 0 10px; justify-content:flex-end; }
+#tagStatusFilters { flex:none; margin:0 0 12px; padding:0 0 10px; border-bottom:1px solid var(--line); }
+#categoryGrid { overflow:auto; min-height:0; grid-auto-rows:max-content; align-content:start; padding:4px 5px 14px; }
+/* Shared rounded scrollbar language for main window, editors, lists and readers. */
+* { scrollbar-width:thin; scrollbar-color:transparent transparent; }
+*:hover,*:focus-within { scrollbar-color:color-mix(in srgb,var(--muted) 48%,transparent) transparent; }
+*::-webkit-scrollbar { width:8px; height:8px; }
+*::-webkit-scrollbar-track,*::-webkit-scrollbar-corner { background:transparent; }
+*::-webkit-scrollbar-thumb { background:transparent; border:2px solid transparent; background-clip:padding-box; border-radius:12px; }
+*:hover::-webkit-scrollbar-thumb,*:focus-within::-webkit-scrollbar-thumb { background-color:color-mix(in srgb,var(--muted) 48%,transparent); }
+*::-webkit-scrollbar-thumb:hover { background-color:var(--accent); }
+*::-webkit-scrollbar-button { display:none; width:0; height:0; }
+#librarySearchHeader { flex-wrap:wrap; }
+#librarySearchHeader .toolbar-actions { margin-left:auto; width:auto; justify-content:flex-end; }
+#libraryView>.library-toolbar,#categoriesView>.library-toolbar { display:none; }
+
+/* Two compact pinned rows, sharing the cards' content edges. */
+#librarySearchHeader { flex-direction:row; flex-wrap:nowrap; align-items:center; margin-left:5px; margin-right:13px; }
+#librarySearchHeader .top-tools { width:auto; flex:1; min-width:140px; padding:0; }
+#librarySearchHeader .global-search { width:auto; min-width:80px; flex:1; }
+#librarySearchHeader .toolbar-actions { flex-wrap:nowrap; gap:6px; flex:none; }
+#librarySearchHeader .add-button { white-space:nowrap; }
+#libraryHeading { padding:4px 8px; border:0; background:none; }
+#libraryGrid,#categoryGrid { scrollbar-gutter:stable; }
+#filters { margin:0 13px 10px 5px; padding:8px 10px; align-items:center; flex-wrap:nowrap; }
+#multiFilterControls { flex:1; min-width:0; gap:6px; flex-wrap:wrap; }
+#activeFilterChips { display:none; }
+.completion-filter .filter-options { left:0; right:auto; }
+#filters,#filters * { animation:none!important; }
+#batchDelete { color:#f07379!important; }
+#batchDelete:hover,#batchDelete.drag-delete-over { color:#ff9ca1!important; background:rgba(232,74,88,.16); }
+#batchCount { display:none; }
+#batchSelectAll { max-width:56px; overflow:hidden; white-space:nowrap; }
+#categoriesView .tag-tools { display:flex; align-items:center; flex-wrap:nowrap; gap:10px; margin:0 13px 10px 5px; }
+#categoriesView .tag-search { flex:1; min-width:100px; width:auto; }
+#categoriesView .tag-tabs { flex:none; gap:4px; }
+#tagSelectionTools { margin:0; flex:none; }
+#tagSelectionTools>div { display:flex; gap:6px; }
+#tagStatusFilters { display:flex; align-items:center; gap:16px; margin:0 13px 10px 5px; padding:12px 16px; }
+#tagStatusFilters .status-section-heading { margin:0; flex:none; }
+#tagStatusFilters .tag-status-options { gap:8px; }
+@media(max-width:1200px) {
+ #librarySearchHeader { gap:7px!important; }
+ #librarySearchHeader .top-tools { gap:6px; }
+ #librarySearchHeader .view-switch-btn { width:27px; padding:0; }
+ #librarySearchHeader .local-resources-button { padding-inline:8px; }
+ #categoriesView .tag-tools { gap:6px; }
+ #categoriesView .tag-tab { padding-inline:8px; }
+}
+
+#batchSelectAll { max-width:none; flex:none; padding:6px 8px; overflow:visible; }
+.library-grid .resource-card { animation:none; }

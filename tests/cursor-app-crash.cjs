@@ -1,0 +1,8 @@
+const fs=require('fs'),path=require('path'),cp=require('child_process'),assert=require('assert/strict');
+const ready=path.resolve('test-artifacts/final-three/app-crash-ready.json');if(fs.existsSync(ready))fs.unlinkSync(ready);
+const env={...process.env};delete env.ELECTRON_RUN_AS_NODE;
+const child=cp.spawn(path.resolve('../runtime-44/extracted/electron.exe'),['tests/native-cursor-acceptance.cjs','--crash=app'],{env,windowsHide:true,stdio:'ignore'});
+const report={};let info;
+async function until(fn,label){for(let i=0;i<100;i++){if(await fn())return;await new Promise(r=>setTimeout(r,75))}throw Error('Timeout '+label)}
+function alive(pid){try{process.kill(pid,0);return true}catch(e){if(e.code==='ESRCH')return false;throw e}}
+(async()=>{try{await until(()=>fs.existsSync(ready),'worker hidden cursor ready');info=JSON.parse(fs.readFileSync(ready));assert.equal(info.pid,child.pid);const probe=require('./cursor-probe.cjs').create(info.handle);report.before=await probe('read');assert.equal(report.before.flags,0);child.kill();await until(()=>!alive(child.pid),'app terminated');await until(async()=>{report.after=await probe('read');return report.after.flags===1},'desktop cursor restored after app crash');await until(()=>!alive(info.hostPid),'native helper exits after parent crash');report.hostExited=true;report.mpvExited=!alive(info.mpvPid);report.pass=true;}catch(e){report.error=e.stack;process.exitCode=1;}finally{if(alive(child.pid))child.kill();for(const pid of [info?.hostPid,info?.mpvPid].filter(Boolean))if(alive(pid))process.kill(pid);fs.writeFileSync('test-artifacts/final-three/cursor-app-crash.json',JSON.stringify(report,null,2));console.log(JSON.stringify(report));}})();

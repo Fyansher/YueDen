@@ -1,0 +1,17 @@
+const test=require('node:test'),assert=require('node:assert/strict'),Runtime=require('../app/metadata-runtime'),{create}=require('../app/metadata-refresh-job');
+const pending=()=>{const signal=Runtime.signal();return new Promise((_,reject)=>signal.addEventListener('abort',()=>reject(signal.reason),{once:true}))};
+test('success / empty / parse diagnostic',async()=>{const a=create({refresh:async item=>({...item,name:'补全'})});assert.equal((await a.run(1,'a',{id:'1'})).status,'success');const b=create({refresh:async item=>item});assert.equal((await b.run(2,'b',{id:'2'})).status,'empty');const c=create({refresh:async item=>{Runtime.recordFailure({kind:'parse'});return item}});assert.equal((await c.run(3,'c',{id:'3'})).status,'parse-error')});
+test('永久pending接收真实AbortSignal；stop阻止晚结果并立即可开新job',async()=>{let started,aborted=false;const ready=new Promise(r=>started=r);const a=create({refresh:async item=>{if(item.id==='new')return {...item,name:'new'};const s=Runtime.signal();started();return new Promise((_,reject)=>s.addEventListener('abort',()=>{aborted=true;reject(s.reason)},{once:true}))}});const old=a.run(1,'old',{id:'old'});await ready;assert.equal((await a.run(1,'duplicate',{id:'dup'})).status,'busy');a.cancel(1,'old');assert.equal((await old).status,'cancelled');assert.ok(aborted);assert.equal((await a.run(1,'new',{id:'new'})).status,'success')});
+test('有界timeout中止底层signal',async()=>{let signal;const a=create({timeoutMs:20,refresh:async()=>{signal=Runtime.signal();return pending()}});const keep=setTimeout(()=>{},100);try{assert.equal((await a.run(2,'timeout',{id:'1'})).status,'timeout');assert.ok(signal.aborted)}finally{clearTimeout(keep)}});
+test('backoff立即取消；不启动后续批项',async()=>{let reached,requests=0;const ready=new Promise(r=>reached=r);const a=create({refresh:async item=>{requests++;reached();await Runtime.delay(60000);return item}});const result=a.run(1,'delay',{id:'1'});await ready;a.cancel(1,'delay');assert.equal((await result).status,'cancelled');assert.equal(requests,1)});
+test('不守约的迟到结果不能复活已取消任务',async()=>{let finish,started;const ready=new Promise(r=>started=r);const a=create({refresh:()=>new Promise(r=>{finish=r;started()})});const result=a.run(7,'late',{id:'1'});await ready;a.cancel(7,'late');assert.equal((await result).status,'cancelled');finish({id:'1',name:'late'});await Promise.resolve();});
+test('真实 HTTP: stop 中断响应流，立即重启不受旧任务影响',async()=>{
+ const http=require('node:http'),{once}=require('node:events'),{nativeJson}=require('../app/native-json');
+ let received,closed;const started=new Promise(r=>received=r),disconnected=new Promise(r=>closed=r);
+ const server=http.createServer((req,res)=>{if(req.url==='/new'){res.end('{"name":"new"}');return;}res.writeHead(200,{'Content-Type':'application/json'});res.write('{');res.on('close',closed);received();});
+ server.listen(0,'127.0.0.1');await once(server,'listening');
+ const origin='http://127.0.0.1:'+server.address().port;
+ const job=create({refresh:async item=>({...item,...await nativeJson(fetch,origin+'/'+item.id,5000)})});
+ try{const old=job.run(31,'old',{id:'old'});await started;job.cancel(31,'old');const next=job.run(31,'new',{id:'new'});assert.equal((await old).status,'cancelled');assert.equal((await next).item.name,'new');await Promise.race([disconnected,require('node:timers/promises').setTimeout(1500).then(()=>{throw Error('底层 HTTP 未断开')})]);}
+ finally{server.closeAllConnections();await new Promise(r=>server.close(r));}
+});

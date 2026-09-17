@@ -1,0 +1,1 @@
+const {EventEmitter}=require('node:events'),events=new EventEmitter();let revision=0;module.exports={changed(){events.emit('changed',++revision);},revision:()=>revision,subscribe(callback){events.on('changed',callback);return()=>events.off('changed',callback);}};

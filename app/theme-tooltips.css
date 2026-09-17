@@ -1,0 +1,3 @@
+.um-themed-tooltip{position:fixed;z-index:2147483647;max-width:min(360px,calc(100vw - 16px));padding:7px 11px;border:1px solid color-mix(in srgb,var(--accent,#65d8b0) 35%,transparent);border-radius:10px;background:var(--panel-2,#182532);color:var(--text,#e6edf4);box-shadow:0 6px 24px #0003;font:12px/1.5 "Microsoft YaHei UI",sans-serif;overflow-wrap:anywhere;pointer-events:none;opacity:0;visibility:hidden;transform:translateY(3px);transition:opacity .15s,transform .2s,visibility .15s}
+.um-themed-tooltip.visible{opacity:1;visibility:visible;transform:translateY(0)}
+@media(prefers-reduced-motion:reduce){.um-themed-tooltip{transition:none}}

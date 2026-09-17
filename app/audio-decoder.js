@@ -1,0 +1,6 @@
+/* Pure audio fallback: lossless PCM stream, retaining input channels; no video track. */
+const {spawn}=require('node:child_process'),path=require('node:path'),{Readable}=require('node:stream');
+function create(){const processes=new Set();function stop(){for(const p of processes)p.kill();processes.clear();}
+ function response(file,start,request){if(request.method==='HEAD')return new Response(null,{headers:{'Content-Type':'audio/wav'}});const p=spawn(path.join(__dirname,'codec/bin/ffmpeg.exe'),['-v','error','-nostdin','-readrate','1.5','-ss',String(Math.max(0,Number(start)||0)),'-protocol_whitelist','file,pipe','-i',file,'-map','0:a:0','-vn','-sn','-dn','-c:a','pcm_s24le','-f','wav','pipe:1'],{windowsHide:true,stdio:['ignore','pipe','pipe']});processes.add(p);p.stderr.resume();p.once('error',()=>p.stdout.destroy(Error('音频兼容解码器无法启动')));p.once('exit',code=>{processes.delete(p);if(code)p.stdout.destroy(Error('音频解码失败'));});const cancel=()=>p.kill();request.signal?.addEventListener('abort',cancel,{once:true});p.stdout.once('close',()=>{cancel();processes.delete(p);request.signal?.removeEventListener('abort',cancel);});return new Response(Readable.toWeb(p.stdout),{headers:{'Content-Type':'audio/wav','Cache-Control':'no-store'}});}
+ return {response,stop,count:()=>processes.size};}
+module.exports={create};

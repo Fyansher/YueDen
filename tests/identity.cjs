@@ -1,0 +1,4 @@
+const appModule=require('./app-module.cjs');
+const test=require('node:test'),assert=require('node:assert/strict'),I=appModule('resource-identity');
+test('同名不同作者不合并；只有名称待确认；路径不做兼容字符折叠',()=>{const a={id:'a',type:'book',name:'同名书',developer:'甲',localPath:'C:/a.epub'},b={id:'b',type:'book',name:'同名书',developer:'乙',localPath:'C:/b.epub'};assert.equal(I.compare(a,b).status,'no-match');assert.equal(I.compare({...a,developer:''},{...b,developer:''}).status,'review');assert.notEqual(I.pathKey('C:/Ａ.txt'),I.pathKey('C:/A.txt'));});
+test('人工分离优先于相同平台 ID，共同路径用于来源匹配',()=>{const a={id:'a',type:'game',steamAppId:'1',localPath:'C:/a.exe'},b={id:'b',type:'game',steamAppId:'1',localPath:'C:/b.exe'};assert.equal(I.compare(a,b).status,'match');assert.equal(I.compare({...a,identityDecisions:[{key:I.key(b),action:'separate'}]},b).status,'no-match');assert.equal(I.compare(a,{...a,id:'new'}).level,'source');});

@@ -1,0 +1,1 @@
+export function windowControl(win:any,action:unknown){switch(action){case 'minimize':win.minimize();break;case 'maximize':win.isMaximized()?win.unmaximize():win.maximize();break;case 'fullscreen':win.setFullScreen(!win.isFullScreen());break;case 'close':win.close();break;default:throw Error('窗口命令无效');}}

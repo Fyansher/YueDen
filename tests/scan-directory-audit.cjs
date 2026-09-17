@@ -1,0 +1,3 @@
+// User-authorized read-only scan. Private paths are retained only in test-artifacts.
+const fs=require('node:fs'),path=require('node:path');
+(async()=>{const roots=process.argv.slice(2);if(!roots.length)throw Error('需要明确扫描根目录');const r=await require('../app/scan-pipeline').scan(roots,'game',{online:false,directoryPreview:true});fs.writeFileSync(path.resolve(__dirname,'../test-artifacts/directory-scan-audit.json'),JSON.stringify(r,null,2));console.log(JSON.stringify({count:r.items.length,unknown:r.items.filter(i=>i.classification.type==='unknown_application').length,directoryGroups:r.items.filter(i=>i.directoryProposal).length,metrics:r.metrics,warnings:r.warnings}));})().catch(e=>{console.error(e);process.exitCode=1;});

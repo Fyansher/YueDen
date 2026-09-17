@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "source": "用户核对的软件产品身份；用于与通用结构证据结合，不按游戏目录名排除",
+  "products": [
+    {"id":"citra","kind":"emulator","entries":["citra.exe","citra-qt.exe","citra-room.exe"],"companions":["citra.exe","citra-qt.exe","citra-room.exe"],"minimumCompanions":2},
+    {"id":"dango","kind":"translator","entries":["DangoTranslator.exe"],"companions":["Qt5Core.dll","Qt5Widgets.dll","unins000.dat"],"minimumCompanions":2},
+    {"id":"dalamud","kind":"third-party-launcher","productPrefix":"Dalamud.","originalPrefix":"Dalamud."},
+    {"id":"hunterpie","kind":"game-overlay","product":"HunterPie","company":"Haato","entries":["HunterPie.exe"]},
+    {"id":"stardrop","kind":"mod-manager","product":"Stardrop","company":"Stardrop","entries":["Stardrop.exe"]},
+    {"id":"smapi","kind":"mod-framework","product":"SMAPI","originalPrefix":"SMAPI."},
+    {"id":"reshade","kind":"graphics-filter","product":"ReShade","company":"crosire","originalPrefix":"ReShade"}
+  ]
+}

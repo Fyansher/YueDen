@@ -1,0 +1,3 @@
+const fs=require('node:fs/promises'),path=require('node:path');
+async function inspect(paths){if(!Array.isArray(paths)||paths.length>500)throw Error('一次最多拖入500个文件或目录');const files=[],directories=[],rejected=[];for(const value of [...new Set(paths)]){if(typeof value!=='string'||!path.isAbsolute(value)||value.includes('\0')){rejected.push('路径无效');continue;}try{const stat=await fs.stat(value);if(stat.isDirectory())directories.push(value);else if(stat.isFile())files.push(value);else rejected.push(path.basename(value)+'：不是文件或目录');}catch(error){rejected.push(path.basename(value)+'：'+(error.code==='ENOENT'?'文件不存在':'无法访问'));}}return {files,directories,rejected};}
+module.exports={inspect};

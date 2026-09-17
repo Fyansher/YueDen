@@ -1,0 +1,13 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),os=require('node:os'),path=require('node:path');
+const {createProgressStore}=require('../app/reader-progress-store');
+(async()=>{const root=fs.mkdtempSync(path.join(os.tmpdir(),'um-progress-')),file=path.join(root,'reader-progress.json');let attempts=0;
+ const io={...fs.promises,rename:async(...args)=>{if(attempts++<3)throw Object.assign(Error('locked'),{code:'EPERM'});return fs.promises.rename(...args);}};
+ const store=createProgressStore(()=>file,{io,wait:async()=>{}});
+ await Promise.all(Array.from({length:25},(_,i)=>store.save('book-'+i,{positions:{page:i},bookmarks:['note']})));
+ assert.equal(Object.keys(store.read()).length,25);assert.equal(store.read()['book-24'].positions.page,24);assert.equal(fs.readdirSync(root).length,1);
+ fs.writeFileSync(file,'broken');await assert.rejects(store.save('x',{}),/损坏/);assert.equal(fs.readFileSync(file,'utf8'),'broken');
+ fs.writeFileSync(file,'{}');await store.save('retry',{page:2});assert.equal(store.read().retry.page,2);
+ const locked=createProgressStore(()=>file,{io:{...fs.promises,rename:async()=>{throw Object.assign(Error('locked'),{code:'EPERM'});}},wait:async()=>{}});
+ await assert.rejects(locked.save('no-loss',{page:9}),/原记录保留/);assert.equal(store.read().retry.page,2);assert.ok(fs.readdirSync(root).some(n=>n.endsWith('.tmp')));
+ console.log('PASS: 7 progress assertions (injected Windows lock, concurrent writes, corruption, retry, recoverable failure)');
+})().catch(e=>{console.error(e);process.exitCode=1});

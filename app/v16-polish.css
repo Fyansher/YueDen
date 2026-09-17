@@ -1,0 +1,60 @@
+/* Scoped final styles: preserve established cover ratios and uniform card heights. */
+.local-import-progress { padding:10px 24px 14px; background:var(--panel-2); border-bottom:1px solid var(--line); display:grid; gap:8px; color:var(--text); font-size:12px; }
+.local-import-progress progress { width:100%; height:5px; appearance:none; border:0; border-radius:9px; overflow:hidden; }
+.local-import-progress progress::-webkit-progress-bar { background:var(--line); }
+.local-import-progress progress::-webkit-progress-value { background:var(--accent); transition:width .35s ease; border-radius:9px; }
+.local-import-progress:not(.is-finished) span::before { content:''; display:inline-block; width:10px; height:10px; border:2px solid var(--line); border-top-color:var(--accent); border-radius:50%; margin-right:8px; animation:import-spin .8s linear infinite; }
+.local-import-row { transition:border-color .3s,background .3s,box-shadow .4s; }
+.local-import-row[data-phase=searching],.local-import-row[data-phase=queued] { border-color:var(--accent-2); }
+.local-import-row[data-phase=choosing] { border-color:var(--warn); background:color-mix(in srgb,var(--warn) 6%,var(--panel)); }
+.local-import-row[data-phase=success] { border-color:var(--accent); box-shadow:inset 3px 0 var(--accent); background:color-mix(in srgb,var(--accent) 5%,var(--panel)); animation:import-success .5s cubic-bezier(.2,1.4,.4,1); }
+.local-import-row[data-phase=partial],.local-import-row[data-phase=skipped] { border-style:dashed; }
+.local-import-row[data-phase=error] { border-color:var(--danger); }
+@keyframes import-spin { to { transform:rotate(360deg); } }
+@keyframes import-success { 0% { transform:scale(.992); } 65% { transform:scale(1.003); } 100% { transform:none; } }
+.batch-summary { flex-wrap:wrap; gap:12px; }
+.batch-summary .batch-actions { margin:0; flex-shrink:0; }
+.selection-mode .card-select { touch-action:none; user-select:none; }
+.library-grid.is-painting,.library-grid.is-painting * { user-select:none; cursor:crosshair; }
+.resource-card.is-selected { transition:border-color .15s,box-shadow .18s; }
+.refresh-protection-dialog { width:min(520px,calc(100vw - 32px)); }
+.refresh-protection-search { width:100%; }
+.refresh-protection-list { overflow:auto; max-height:48vh; margin:12px 0; display:grid; gap:4px; }
+.refresh-protection-list label { display:flex; gap:10px; align-items:center; padding:9px; border-radius:9px; background:var(--panel-2); min-width:0; }
+.refresh-protection-list label:has(:checked) { background:color-mix(in srgb,var(--accent) 12%,var(--panel)); }
+.refresh-protection-list input { width:16px; height:16px; flex:none; accent-color:var(--accent); }
+.refresh-protection-list span { flex:1; overflow-wrap:anywhere; }
+.refresh-protection-list small { color:var(--muted); }
+#steamSyncStatus { line-height:1.7; }
+.card-quick-editor { position:fixed; z-index:1000; min-width:174px; max-width:calc(100vw - 16px); max-height:calc(100vh - 48px); overflow:auto; padding:8px; border:1px solid var(--line); border-radius:13px; background:var(--panel); color:var(--text); box-shadow:var(--shadow); animation:quick-edit-in .24s cubic-bezier(.2,1.3,.4,1); }
+.card-quick-editor strong { display:block; padding:6px 8px 9px; font-size:11px; color:var(--muted); }
+.card-quick-editor button { display:flex; align-items:center; gap:9px; width:100%; min-height:34px; border:0; border-radius:8px; color:var(--text); background:transparent; padding:6px 8px; text-align:left; }
+.card-quick-editor button:hover,.card-quick-editor [aria-pressed=true] { background:color-mix(in srgb,var(--accent) 13%,var(--panel)); }
+.card-quick-editor button>svg { width:20px; height:20px; color:var(--warn); }
+.card-quick-editor button i { margin-left:auto; color:var(--accent); font-style:normal; }
+@keyframes quick-edit-in { from { opacity:0; transform:translateY(5px) scale(.95); } to { opacity:1; transform:none; } }
+.card-tag-rows { display:flex; gap:5px; height:18px; min-width:0; }
+.card-tag-rows[data-game=true] { height:37px; flex-direction:column; gap:3px; }
+.card-genre-tags,.card-category-tags { display:flex; min-width:0; gap:4px; height:17px; overflow:hidden; }
+.card-tag-rows:not([data-game=true])>.card-genre-tags { flex:1; }
+.card-tag-rows:not([data-game=true])>.card-category-tags { flex:1; }
+.card-tag { display:block; max-width:90px; min-width:0; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; font-size:9px; line-height:17px; color:var(--muted); }
+.card-tag.category { color:var(--text); background:var(--panel-2); border-radius:5px; padding:0 5px; }
+.card-tag-more { font-size:9px; line-height:17px; flex:none; color:var(--muted); }
+.library-grid:not(.list-layout):not(.small-layout) .card-body { height:136px; padding:9px 11px; gap:4px; }
+.library-grid:not(.list-layout):not(.small-layout) .card-creator { min-height:15px; }
+.library-grid:not(.list-layout):not(.small-layout) .card-community-row { min-height:21px; height:21px; }
+.library-grid:not(.list-layout):not(.small-layout) .card-foot { min-height:18px; gap:5px; }
+.card-foot .card-year { margin-left:auto; font-size:9px; white-space:nowrap; }
+.card-source-score { max-width:100%; }
+.card-source-score>b { max-width:150px; }
+.library-grid:not(.list-layout):not(.small-layout) .card-cover .card-actions { display:grid; grid-template-columns:repeat(2,26px); gap:4px; right:auto; left:8px; bottom:8px; }
+.library-grid:not(.list-layout):not(.small-layout) .card-cover .card-action { width:26px; height:26px; padding:3px; }
+.portrait-layout .card-foot .card-year { font-size:8px; }
+.portrait-layout .card-foot .card-personal-label { font-size:0; }
+.portrait-layout .card-foot .card-personal-label::after { content:'我的'; font-size:9px; }
+.portrait-layout .card-foot .stars { font-size:11px; letter-spacing:0; }
+.list-layout .list-ratings .card-source-score { flex-wrap:wrap; }
+.list-layout .list-ratings .card-source-score>b { max-width:120px; white-space:normal; overflow-wrap:anywhere; }
+body.no-animations .local-import-row,body.no-animations .card-quick-editor,body.no-animations .local-import-progress span::before { animation:none; }
+@media(prefers-reduced-motion:reduce) { .local-import-row,.card-quick-editor,.local-import-progress span::before { animation:none!important; transition:none!important; } }

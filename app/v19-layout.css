@@ -1,0 +1,23 @@
+.content:has(#libraryView:not(.hidden)) { display:flex; flex-direction:column; overflow:hidden; padding-bottom:14px; }
+.content:has(#libraryView:not(.hidden)) #librarySearchHeader { flex:none; margin-bottom:18px; }
+#libraryView:not(.hidden) { display:flex; flex-direction:column; min-height:0; flex:1; }
+#libraryView>.library-toolbar,#libraryView>#filters,#libraryView>#batchProgress { flex:none; }
+#libraryGrid { grid-auto-rows:max-content; overflow:auto; min-height:0; padding:4px 5px 16px; align-content:start; }
+#batchSummary { display:flex; gap:6px; align-items:center; margin:0; padding:0; flex-wrap:nowrap; }
+#batchSummary #batchCount { font-size:11px; white-space:nowrap; }
+#batchSummary #batchSelectAll { white-space:nowrap; font-size:11px; }
+#batchSummary.drag-only #batchCount,#batchSummary.drag-only #batchSelectAll,#batchSummary.drag-only #batchRefresh,#batchSummary.drag-only #batchMove { display:none; }
+.toolbar-actions { flex-wrap:wrap; gap:7px; }
+.local-import-row[data-phase=error],.local-import-row[data-phase=partial] { border:1px solid var(--danger)!important; background:color-mix(in srgb,var(--danger) 6%,var(--panel))!important; }
+.local-import-row[data-phase=error] .local-row-meta,.local-import-row[data-phase=partial] .local-row-meta { color:var(--danger); }
+.library-grid:not(.list-layout):not(.small-layout) .card-foot { position:relative; }
+.library-grid:not(.list-layout):not(.small-layout) .card-foot .card-actions { position:absolute; bottom:27px; right:0; opacity:0; pointer-events:none; transform:translateY(4px); transition:opacity .16s,transform .23s cubic-bezier(.2,1.4,.4,1); background:var(--panel); border-radius:6px; z-index:3; }
+.library-grid .resource-card:not(:hover) .card-actions { opacity:0; pointer-events:none; }
+.library-grid .resource-card:hover .card-actions { opacity:1!important; pointer-events:auto!important; transform:none!important; }
+.library-grid.portrait-layout:not(.list-layout):not(.small-layout) .card-foot { display:flex; height:22px; min-height:22px; }
+.library-grid.portrait-layout:not(.list-layout):not(.small-layout) .card-body { height:136px; }
+.library-grid.portrait-layout:not(.list-layout):not(.small-layout) .resource-card { grid-template-rows:auto 136px; }
+.library-grid.portrait-layout:not(.list-layout):not(.small-layout) .card-foot .card-year { margin-left:auto; }
+.library-grid.list-layout .compact-row { position:relative; }
+.library-grid.list-layout .compact-row .card-year { position:absolute; right:14px; bottom:12px; }
+.library-grid.list-layout .compact-row .card-actions { position:absolute; right:14px; bottom:35px; }

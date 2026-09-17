@@ -1,0 +1,6 @@
+const cp=require('node:child_process'),path=require('node:path');
+// Each measurement uses a fresh observer. Holding a thread that moved the pointer
+// asleep across the idle period can report its stale cursor instead of the host's.
+function create(handle){return (...args)=>new Promise((resolve,reject)=>cp.execFile(path.resolve(__dirname,'WindowProbe.exe'),[String(handle),...args.map(String)],{windowsHide:true,timeout:3000},(error,out)=>{if(error)return reject(error);try{resolve(JSON.parse(out))}catch(e){reject(e)}}))}
+async function cycle(handle){const probe=create(handle),frame=await probe(),before=await probe('read'),x=frame.x+Math.floor(frame.width/2),y=frame.y+Math.floor(frame.height/2);try{await probe('move',x,y);const start=await probe('read');let idle;for(let n=0;n<60;n++){idle=await probe('read');if(idle.flags===0)break;await new Promise(r=>setTimeout(r,50));}await probe('move',x+15,y);const moved=await probe('read');return {start:start.flags,idle:idle.flags,moved:moved.flags,startHandle:start.cursor,idleHandle:idle.cursor,movedHandle:moved.cursor,foreground:moved.foreground,expected:Number(handle)}}finally{await probe('move',before.x,before.y)}}
+module.exports={create,cycle};

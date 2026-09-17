@@ -1,0 +1,4 @@
+(function(root){
+ function parse(value,offset=0){const text=String(value||'').slice(0,2*1024*1024),lines=[],embedded=Number(text.match(/\[offset:([+-]?\d+)\]/i)?.[1])||0;for(const line of text.split(/\r?\n/)){const stamps=[...line.matchAll(/\[(\d{1,4}):(\d{2})(?:[.:](\d{1,3}))?\]/g)],body=line.replace(/\[[^\]]*\]/g,'').trim();for(const match of stamps){if(Number(match[2])>=60)continue;const ms=Number((match[3]||'0').padEnd(3,'0'));lines.push({time:Math.max(0,Number(match[1])*60+Number(match[2])+(ms+embedded+Number(offset||0))/1000),text:body});}}lines.sort((a,b)=>a.time-b.time);return {kind:lines.length?'synced':text.trim()?'plain':'none',text,lines};}
+ const api={parse};if(typeof module!=='undefined')module.exports=api;else root.AudioLyrics=api;
+})(typeof window!=='undefined'?window:globalThis);

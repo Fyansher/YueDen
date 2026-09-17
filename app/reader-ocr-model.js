@@ -1,0 +1,5 @@
+/* Merge spatially equivalent lines, without asking users to switch language modes. */
+function mergeOcrLanguages(result){if(!result.variants)return result;const groups=[];for(const variant of result.variants)for(const line of variant.lines||[]){let group=groups.find(g=>Math.abs(g.y-line.y)<Math.max(6,line.height*.55));if(!group){group={y:line.y,rows:[]};groups.push(group);}group.rows.push({...line,language:variant.language});}
+ const score=line=>{const text=line.text||'',kana=(text.match(/[\u3040-\u30ff]/g)||[]).length,han=(text.match(/[\u3400-\u9fff]/g)||[]).length,latin=(text.match(/[A-Za-z]/g)||[]).length;return (kana&&line.language.startsWith('ja')?kana*5:0)+(han&&line.language.startsWith('zh')?han*2:0)+(latin&&!han&&!kana&&line.language.startsWith('en')?latin*2:0)+Math.min(40,text.replace(/\s/g,'').length)*.2;};
+ const lines=groups.sort((a,b)=>a.y-b.y).map(g=>g.rows.sort((a,b)=>score(b)-score(a))[0].text);return {...result,text:lines.join('\n'),warning:result.missing?.length?'本机缺少以下 OCR 语言组件：'+result.missing.join('、')+'；这些语言不能保证识别。':''};}
+module.exports={mergeOcrLanguages};

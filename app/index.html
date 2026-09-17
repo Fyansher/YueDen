@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https: data: blob: um-cover: um-media:; script-src 'self'; media-src um-audio: 'self' https: http: blob: um-media:; connect-src um-audio: 'self' https: http: blob: um-media:; worker-src 'self' blob:; frame-src 'self' blob:; font-src 'self' data: blob:" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>悦森盒 YueDen</title>
+  <link rel="stylesheet" href="design-tokens.css"><link rel="stylesheet" href="styles.css" /><link rel="stylesheet" href="design-system.css">
+  <link rel="stylesheet" href="interaction-fixes.css">
+  <link rel="stylesheet" href="library-actions.css">
+  <link rel="stylesheet" href="local-media.css"><link rel="stylesheet" href="reader-annotations.css">
+<link rel="stylesheet" href="v16-polish.css">
+  <link rel="stylesheet" href="v17-cards.css">
+  <link rel="stylesheet" href="v18-layout.css">
+  <link rel="stylesheet" href="v19-layout.css"><link rel="stylesheet" href="v20-layout.css">
+<link rel="stylesheet" href="audio.css"><link rel="stylesheet" href="playback-controls.css"><link rel="stylesheet" href="theme-tooltips.css"></head>
+<body>
+  <div class="window-shell">
+    <header class="titlebar">
+      <div class="window-brand"><img class="brand-glyph" src="assets/icon.svg" alt=""><span>悦森盒 YueDen</span><small>1.0.1</small></div>
+      <div class="window-actions"><button id="minimizeBtn" aria-label="最小化" title="最小化"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8h10"/></svg></button><button id="maximizeBtn" aria-label="最大化" title="最大化"><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="3" y="3" width="10" height="10"/></svg></button><button id="closeBtn" class="close-window" aria-label="关闭" title="关闭"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m3 3 10 10M13 3 3 13"/></svg></button></div>
+    </header>
+    <div class="app-body">
+      <aside class="sidebar">
+        <div class="sidebar-top">
+          <div class="section-label">工作区</div>
+          <nav class="main-nav" id="mainNav">
+            <button class="nav-item active" data-view="dashboard"><span class="nav-icon">◈</span>总览<span class="nav-count" id="totalNavCount">0</span></button>
+            <button class="nav-item" data-view="all"><span class="nav-icon">▦</span>全部资源</button>
+            <button class="nav-item" data-view="game"><span class="nav-icon">⌁</span>游戏</button>
+            <button class="nav-item" data-view="movie"><span class="nav-icon">▣</span>影视</button>
+            <button class="nav-item" data-view="anime"><span class="nav-icon">✦</span>番剧</button>
+            <button class="nav-item" data-view="manga"><span class="nav-icon">▤</span>漫画</button>
+            <button class="nav-item" data-view="book"><span class="nav-icon">▤</span>书籍</button><button class="nav-item" data-view="audio"><span class="nav-icon">♫</span>声音</button>
+          </nav>
+          <div class="section-label section-label-spaced">管理</div>
+          <nav class="main-nav">
+            <button class="nav-item" data-view="categories"><span class="nav-icon">#</span>标签与分类</button>
+          </nav>
+        </div>
+        <div class="sidebar-bottom">
+          <button class="nav-item" data-view="settings" title="设置"><span class="nav-icon">⚙</span>设置</button>
+        </div>
+      </aside>
+
+      <main class="content">
+        <section class="top-header" id="librarySearchHeader">
+          <div class="top-tools"><label class="global-search"><span>⌕</span><input id="searchInput" placeholder="搜索名称、作者、标签…" autocomplete="off" /></label><button class="add-button" id="addBtn"><span>＋</span> 添加资源</button></div>
+        </section>
+
+        <section id="dashboardView" class="view-panel"><div class="library-toolbar"><h2>总览</h2></div>
+          <div class="stat-grid" id="statGrid"></div>
+          <div class="dashboard-grid">
+            <article class="panel status-panel"><div class="panel-title"><div><span class="eyebrow">状态分布</span><h2>你正在收藏什么</h2></div><button class="text-button" data-view="all">查看全部 →</button></div><div class="status-content"><div class="donut" id="donut"><div><strong id="donutTotal">0</strong><span>条资源</span></div></div><div class="legend" id="statusLegend"></div></div></article>
+            <article class="panel recent-panel"><div class="panel-title"><div><span class="eyebrow">最近添加</span><h2>继续整理你的收藏</h2></div></div><div class="recent-list" id="recentList"></div></article>
+          </div>
+          <article class="panel insights-panel"><div class="panel-title"><div><span class="eyebrow">资源统计</span><h2>类型与评分</h2></div></div><div class="insights" id="insights"></div></article>
+          <article class="panel annual-panel"><div class="panel-title"><div><span class="eyebrow">年度回顾</span><h2>这一年，你完成了什么</h2></div><label class="year-picker">回顾年份<select id="annualYear"></select></label></div><div class="annual-summary" id="annualSummary"></div><div class="annual-timeline" id="annualTimeline"></div></article>
+        </section>
+
+        <section id="libraryView" class="view-panel hidden">
+          <div class="library-toolbar"><div><span class="eyebrow" id="libraryEyebrow">资源列表</span><h2 id="libraryHeading">全部资源 <span id="resultCount">0</span></h2></div><div class="toolbar-actions"><button class="filter-button" id="filterToggle">☷ 筛选</button><div class="view-switch"><button type="button" class="view-switch-btn" data-layout="small" title="小卡片" aria-label="小卡片">▦</button><button type="button" class="view-switch-btn" data-layout="portrait" title="竖向封面" aria-label="竖向封面">▯</button><button type="button" class="view-switch-btn" data-layout="cards" title="横向封面" aria-label="横向封面">▭</button><button type="button" class="view-switch-btn" data-layout="list" title="列表" aria-label="列表">☷</button></div></div></div>
+          <div class="filters hidden" id="filters"><select id="statusFilter" multiple><option value="all">全部状态</option></select><select id="genreFilter" multiple><option value="all">全部类型标签</option></select><select id="categoryFilter" multiple><option value="all">全部分类</option></select><select id="yearFilter" multiple><option value="all">全部年份</option></select><select id="ratingFilter" multiple><option value="all">全部评分</option><option value="4">4 星及以上</option><option value="3">3 星及以上</option><option value="1">已评分</option></select><button class="clear-filter" id="clearFilters">清除筛选</button></div>
+          <div id="libraryGrid" class="library-grid"></div>
+          <div id="libraryEmpty" class="empty-state hidden"><div class="empty-art">✦</div><h3>这里还没有资源</h3><p>输入名称后点击添加，最少只需一步就能建立记录。</p><button class="add-button" id="emptyAdd">＋ 添加第一条</button></div>
+        </section>
+
+        <section id="categoriesView" class="view-panel hidden"><div class="library-toolbar"><div><span class="eyebrow">整理方式</span><h2>标签与分类</h2><p class="section-subtitle">点击标签可连续多选；高亮表示已选中，点击“查看匹配资源”应用组合筛选。</p></div></div><div class="tag-tools"><label class="global-search tag-search"><span>⌕</span><input id="categorySearch" placeholder="搜索标签或分类…" /></label><div class="tag-tabs"><button class="tag-tab active" data-tag-kind="all">全部</button><button class="tag-tab" data-tag-kind="category">自定义分类</button><button class="tag-tab" data-tag-kind="genre">类型标签</button></div></div><div class="category-grid" id="categoryGrid"></div></section>
+<section id="settingsView" class="view-panel hidden"><div class="library-toolbar"><div><span class="eyebrow">偏好设置</span><div class="settings-title-row"><h2>设置</h2></div><div class="network-cache-controls"><button type="button" class="danger-button" id="clearNetworkCacheBtn">清除缓存</button><span id="networkCacheSize" class="saved-hint" role="status" aria-live="polite">尚未查询</span></div><p class="section-subtitle">外观、同步、存档和伪装模式都在这里集中管理。</p></div></div><div class="settings-layout"><div class="settings-card data-backup-card"><h3>数据与备份</h3><p>导出资源库备份，或导入已有的数据文件。游戏存档快照仍在对应游戏条目中管理。</p><div class="settings-actions"><button class="secondary-button" id="exportBtn">⇩ 导出备份</button><button class="secondary-button" id="importBtn">⇧ 导入数据</button></div></div><div class="settings-card"><h3>外观与交互</h3><label>主题<select id="settingsTheme"><option value="ocean">深色海洋</option><option value="violet">深色紫夜</option><option value="paper">浅色纸张</option></select></label><label>强调色<input id="settingsAccent" type="color" value="#65d8b0" /></label><label class="check-label"><input id="settingsAnimations" type="checkbox" checked /> 启用页面和卡片动效</label><label>启动后默认页面<select id="settingsDefaultView"><option value="dashboard">总览</option><option value="all">全部资源</option><option value="game">游戏</option><option value="movie">影视</option><option value="anime">番剧</option><option value="comic">漫画</option><option value="book">书籍</option><option value="audio">声音</option></select></label><div class="settings-actions"><span id="settingsSaved" class="saved-hint hidden" role="status" aria-live="polite"></span></div></div><div class="settings-card"><h3>笔记与元数据</h3><p>这些设置只保存在本机，用来补充条目链接和 Steam 元数据。</p><label>Obsidian 笔记根目录<input id="settingsObsidian" placeholder="例如 D:\\Notes\\Games" /><small class="settings-help">选择关联笔记时默认打开的文件夹；不影响资源库位置，也不会自动同步笔记。</small></label><label>Steam Web API Key（可选）<input id="settingsSteamKey" type="password" placeholder="留空也不影响基本搜索" /></label><label>Google Books API Key（可选）<input id="settingsGoogleBooksKey" type="password" placeholder="启用额外图书源，其他来源无需此项" /></label><label>SteamID64（可选）<input id="settingsSteamId" placeholder="用于同步游玩时长" /></label><div class="settings-actions"><button type="button" class="secondary-button" id="syncSteamHours">同步游玩时长</button></div><p id="steamSyncStatus" role="status">需要 SteamID64、Steam Web API Key 和公开的游戏详情。保留手填时长。</p></div><div class="settings-card webdav-card"><h3>WebDAV 云同步</h3><p>上传资源库、设置和游戏存档备份。建议使用 HTTPS，并使用专用 WebDAV 账号。</p><label>WebDAV 地址<input id="settingsWebdavUrl" placeholder="https://dav.example.com/remote.php/dav/files/user" /></label><label>用户名<input id="settingsWebdavUsername" /></label><label>密码<input id="settingsWebdavPassword" type="password" /></label><label>远程目录<input id="settingsWebdavPath" placeholder="UnifiedManager" /></label><p>InfiniCLOUD 请使用账户中的 WebDAV 连接地址（例如 https://ogi.teracloud.jp/dav/）、连接 ID 和应用专用密码。测试会验证同步目录的实际访问权限。</p><div class="settings-actions sync-actions"><button class="secondary-button" id="testWebdavBtn">测试连接</button><button class="secondary-button" id="uploadWebdavBtn">↑ 上传同步</button><button class="secondary-button" id="downloadWebdavBtn">↓ 下载同步</button><button class="add-button" id="bidirectionalWebdavBtn">⇄ 双向同步</button><span id="webdavStatus" class="saved-hint"></span></div></div><div class="settings-card disguise-card"><h3>伪装模式</h3><p>伪装模式保持当前资源列表布局，只替换封面、标签和链接为安全学习资料；双击 Esc 可静音、退出播放、最小化全部窗口，并打开指定视频 6 分 37 秒处。快捷键 <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>U</kbd> 可随时退出或切换。</p><label>伪装外观<select id="settingsDisguiseProfile"><option value="course">课程播放器</option><option value="reader">资料阅读器</option><option value="notes">课堂笔记</option></select></label><label>伪装视频链接<input id="settingsDisguiseVideoUrl" placeholder="https://www.bilibili.com/video/..." /></label><small class="settings-note">伪装模式中的链接会打开此视频，并自动从中段开始。</small><div class="settings-actions"><button class="secondary-button" id="enterDisguiseBtn">进入伪装模式</button><button class="danger-button" id="exitDisguiseBtn">退出伪装模式</button><span id="disguiseStatus" class="saved-hint"></span></div></div></div></section>
+      </main>
+    </div>
+  </div>
+
+<div class="modal-backdrop hidden" id="editorBackdrop">
+    <section class="editor-modal">
+      <div class="modal-header"><div><span class="eyebrow" id="editorEyebrow">新建资源</span><h2 id="editorTitle">添加资源</h2></div><button type="button" class="modal-close" id="editorClose">×</button></div>
+      <form id="editorForm">
+        <input type="hidden" id="editorId">
+        <div class="editor-main">
+          <div class="cover-column">
+            <div class="editor-cover-wrap"><div id="coverPreview" class="cover-preview"><span>暂无封面</span></div><div class="cover-edit-rail"><button type="button" id="editCoverBtn" class="cover-edit-button" aria-label="调整封面" data-tooltip="调整封面">✎</button></div></div>
+            <button type="button" class="secondary-button full" id="metadataBtn">⌁ 自动获取信息</button>
+            <p id="metadataCoverage" class="metadata-coverage hidden" aria-live="polite"></p>
+            <button type="button" class="secondary-button full save-button" id="pickSavePathsBtn">⌂ 选择存档位置</button><small id="savePathHint" class="hidden"></small>
+            <button type="button" class="secondary-button full" id="backupSaveBtn">⇧ 立即备份存档</button><button type="button" class="secondary-button full" id="openBackupBtn">▣ 打开备份文件夹</button>
+          </div>
+          <div class="editor-fields">
+            <div class="field-row identity-row">
+              <label class="field name-field">名称（必填）<input id="fieldName" required placeholder="资源名称"></label>
+              <label class="field game-only" id="steamAppIdField">Steam AppID<input id="fieldSteamAppId" inputmode="numeric" placeholder="可选"></label>
+              <label class="field type-field">资源类型<select id="fieldType"><option value="game">游戏</option><option value="movie">影视</option><option value="anime">番剧</option><option value="manga">漫画</option><option value="book">书籍</option><option value="audio">声音</option></select></label>
+            </div>
+            <div class="game-only" id="gamePlatforms"><div class="platform-picker-heading"><span class="field-caption">游戏平台</span><small id="platformSelectionHint">未指定 · 可多选</small></div><div id="gamePlatformOptions" role="group" aria-label="游戏平台，可多选"></div></div>
+            <div class="field-row progress-row"><label class="field">状态<select id="fieldStatus"></select></label><label class="field">完成日期<input id="fieldCompletedDate" type="date"></label><label class="field" id="playtimeField">游玩 / 阅读时长（小时）<input id="fieldPlaytime" type="number" min="0" step="0.1" placeholder="可选"></label></div>
+            <div class="field-row score-row"><div class="field personal-rating-field"><span class="field-caption">个人评分</span><div class="rating-editor" id="ratingEditor"><div class="rating-stars" id="ratingStars"></div><span id="ratingText">未评分</span></div></div><div class="field" id="platformRatingField"><div id="platformRatingDisplay" class="platform-rating-display"><div class="platform-gauge-column"><span class="field-caption" id="platformRatingLabel">平台评分</span><svg id="platformRatingGauge" tabindex="0" class="platform-gauge" viewBox="0 0 152 97" role="slider" aria-label="平台评分"><defs><linearGradient id="ratingGaugeGradient"><stop stop-color="#ba7978"/><stop offset=".5" stop-color="#c7a964"/><stop offset="1" stop-color="#53ac89"/></linearGradient></defs><path class="gauge-track" d="M16 72 A60 60 0 0 1 136 72"/><path class="gauge-arc" d="M16 72 A60 60 0 0 1 136 72"/><g class="gauge-ticks"><path d="M23 72h6M38 34l4 4M76 19v6M114 34l-4 4M129 72h-6"/></g><line id="platformRatingNeedle" class="gauge-needle" x1="76" y1="72" x2="25" y2="72"/><circle class="gauge-hub" cx="76" cy="72" r="4"/><text id="gaugeLow" x="15" y="92">0</text><text id="gaugeHigh" x="137" y="92">100</text></svg></div><div class="platform-rating-copy"><input id="platformRatingValue" type="text" aria-label="直接编辑平台评分" autocomplete="off" placeholder="暂无评分"><span id="platformRatingDetail">等待平台评分</span></div></div><input id="fieldExternalRating" type="hidden"></div></div>
+            <div class="field-row tag-fields"><label class="field">类型标签（逗号分隔）<input id="fieldGenres" placeholder="动作, RPG"></label><label class="field">自定义分类（逗号分隔）<input id="fieldCategories" placeholder="收藏, 年度候选"></label></div>
+            <div class="field-row credits-grid">
+              <label class="field" id="developerField">开发商<input id="fieldDeveloper"></label>
+              <label class="field publication-only" id="translatorField">译者<input id="fieldTranslator"></label>
+              <label class="field" id="publisherField">发行商<input id="fieldPublisher"></label>
+              <label class="field publication-only" id="isbnField">ISBN<input id="fieldIsbn" placeholder="对应版本的 ISBN"></label>
+              <label class="field publication-only" id="pagesField">页数<input id="fieldPages" type="number" min="1" step="1"></label>
+              <label class="field" id="releaseDateField">发行日期<input id="fieldReleaseDate" placeholder="YYYY-MM-DD"></label>
+              <label class="field media-only" id="castField">演员 / 声优<input id="fieldCast" placeholder="逗号分隔"></label>
+              <label class="field media-only" id="episodeField">集数 / 话数<input id="fieldEpisodes" type="number" min="1" step="1"></label>
+            </div>
+            <label class="field">个人评价<textarea id="fieldReview" rows="3" placeholder="写下你的体验与想法…"></textarea></label>
+            <label class="field">简介 / 摘要<textarea id="fieldDescription" rows="3" placeholder="可选"></textarea></label>
+            <div class="field-row link-fields"><div class="field store-link-field"><label for="fieldStoreUrl">商店 / 官方链接</label><div class="inline-path"><input id="fieldStoreUrl" placeholder="https://…"><button type="button" class="secondary-button" id="openStoreBtn">↗ 打开商店</button></div></div><div class="field resource-only" id="resourceField"><label id="resourceUrlLabel" for="fieldResourceUrl">观看 / 访问链接</label><div class="inline-path"><input id="fieldResourceUrl" placeholder="https://…"><button type="button" class="secondary-button resource-only" id="openResourceUrlBtn">↗ 打开链接</button></div></div></div>
+            <div class="field-row local-note-row"><div class="field" id="localPathField"><label for="fieldLocalPath">本地路径</label><div class="inline-path"><input id="fieldLocalPath" placeholder="输入本地路径，或点击右侧选择" aria-label="本地资源路径"><button type="button" class="secondary-button" id="openLocalResourceBtn">↗ 打开</button></div></div><div class="field note-file-field"><label for="fieldNoteUrl">Obsidian 笔记</label><div class="inline-path"><input id="fieldNoteUrl" placeholder="输入笔记路径或 Obsidian URI" aria-label="Obsidian 笔记路径"><button type="button" class="secondary-button" id="openNoteBtn">↗ 打开笔记</button></div></div></div>
+            <input type="hidden" id="fieldSavePaths">
+          </div>
+        </div>
+        <div class="modal-footer"><button type="button" class="danger-button hidden" id="deleteBtn">删除条目</button><div class="footer-right"><button type="button" class="secondary-button" id="editorCancel">取消</button><button type="submit" class="add-button">保存条目</button></div></div>
+      </form>
+    </section>
+  </div>
+
+  <div class="modal-backdrop hidden" id="candidateBackdrop"><section class="candidate-modal"><div class="modal-header"><div><span class="eyebrow">搜索结果</span><h2>请选择一个具体条目</h2></div><button class="modal-close" id="candidateClose">×</button></div><p class="candidate-hint">名称存在多个匹配时，请选择正确的一项。选择后会自动填充封面、标签和外部链接。</p><div id="candidateList" class="candidate-list"></div></section></div>
+  <div id="disguiseScreen" class="disguise-screen hidden"><div class="disguise-top"><div class="disguise-logo">学习频道</div><div class="disguise-top-links">课程中心　收藏　历史记录　⌕</div><button id="disguiseExitTop">退出</button></div><div class="disguise-content"><div class="fake-player"><div class="fake-player-head"><span>正在播放 · 第 8 章 / 资源整理方法</span><span>1080P　⚙</span></div><div class="fake-video"><div class="play-circle">▶</div><div class="fake-subtitle">让知识管理变得简单</div></div><div class="fake-progress"><span></span></div><div class="fake-controls">▶　🔊　　<span>12:48 / 36:20</span><i>全屏　⚙</i></div></div><aside class="course-list"><strong>课程目录</strong><div class="course-active">第 8 章　资源整理方法</div><div>第 7 章　标签体系设计</div><div>第 6 章　数据备份策略</div><div>第 5 章　个人知识库</div><div>第 4 章　年度回顾</div></aside></div><div class="disguise-bottom"><span>学习记录 · 今日已学习 42 分钟</span><span>快捷键 Ctrl + Shift + U 退出伪装</span></div></div>
+  <div class="toast" id="toast"></div>
+  <script src="modal-stack.js"></script>
+  <script src="metadata-text.js"></script>
+  <script src="status-model.js"></script>
+  <script src="rating-model.js"></script>
+  <script src="platform-model.js"></script>
+  <script src="filter-ui.js"></script>
+  <script src="cover-ui.js"></script>
+  <script src="editor-interactions.js"></script>
+  <script src="editor-fields.js"></script>
+  <script src="editor-polish.js"></script>
+  <script src="metadata-results.js"></script>
+  <script src="metadata-session.js"></script>
+  <script src="settings-autosave.js"></script>
+  <script src="library-covers.js"></script>
+  <script src="library-cards.js"></script>
+  <script src="library-polish.js"></script>
+  <script src="selection-range.js"></script><script src="library-selection.js"></script>
+  <script src="library-tools.js"></script>
+  <script src="card-quick-edit.js"></script>
+  <script src="reorder-motion.js"></script><script src="library-drag.js"></script>
+  <script src="workspace-dialog.js"></script><script src="resource-organizer.js"></script><script src="library-relations.js"></script><script src="application-identity.js"></script><script src="resource-identity.js"></script><script src="local-model.js"></script>
+  <script src="import-metadata-queue.js"></script><script src="import-session-model.js"></script><script src="import-controls.js"></script><script src="scan-ui.js"></script>
+  <script src="scan-manual-groups.js"></script>
+<script src="local-import-ui.js"></script>
+  <script src="media-player.js"></script>
+  <script src="epub-image-styles.js"></script><script src="epub-notes.js"></script><script src="reader-prefetch.js"></script><script src="reader-controls.js"></script><script src="reader-color-picker.js"></script><script src="reader-background.js"></script><script src="reader-tabs.js"></script><script src="reader-text-marks.js"></script><script src="reader-annotation-model.js"></script><script src="reader-annotation-surface.js"></script><script src="reader-annotation-translation.js"></script><script src="reader-annotation-layout.js"></script><script src="reader-annotations-ui.js"></script><script src="reader-lookup-ui.js"></script><script src="reader-search.js"></script><script src="reader-workbench.js"></script><script src="reader-image-effects.js"></script><script src="reader-epub-pagination.js"></script><script src="reader-epub-anchor.js"></script><script src="reader-engines.js"></script>
+  <script src="usage-model.js"></script><script src="usage-ui.js"></script><script src="library-sort.js"></script><script src="library-sort-ui.js"></script><script src="appearance.js"></script><script src="renderer.js"></script><script src="audio-lyrics.js"></script><script src="vendor/hls.min.js"></script><script src="playback-controls.js"></script><script src="audio-import-ui.js"></script><script src="audio-context.js"></script><script src="player/audio-adapter.js"></script><script src="lyrics-editor.js"></script><script src="audio-panels.js"></script><script src="audio-capabilities.js"></script>
+<script src="audio-editor.js"></script><script src="audio-completion.js"></script><script src="player/queue-reorder.js"></script><script src="audio-browser-order.js"></script><script src="audio-browser.js"></script><script src="sidebar-ui.js"></script>
+<script src="import-drop-ui.js"></script><script src="theme-tooltips.js"></script></body>
+</html>

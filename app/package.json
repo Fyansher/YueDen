@@ -1,0 +1,8 @@
+{
+  "name": "unified-manager-desktop",
+  "version": "1.0.1",
+  "description": "悦森盒 YueDen 是一款用于集中整理、浏览、播放和阅读个人影视、番剧、音频、书籍、漫画等本地数字内容的 Windows 桌面应用。",
+  "main": "main.js",
+  "private": true,
+  "productName": "悦森盒 YueDen"
+}

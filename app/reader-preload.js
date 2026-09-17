@@ -1,0 +1,10 @@
+const {contextBridge,ipcRenderer}=require('electron');
+contextBridge.exposeInMainWorld('unifiedAPI',{
+  usageSnapshot:()=>ipcRenderer.invoke('usage:snapshot'),usageOpened:id=>ipcRenderer.invoke('usage:opened',id),usageTick:(id,seconds)=>ipcRenderer.invoke('usage:tick',id,seconds),
+ notifyMediaPlaying:()=>ipcRenderer.send('reader:playing'),onMediaPause:callback=>{const listener=(_,kind)=>callback(kind);ipcRenderer.on('media:pause',listener);return()=>ipcRenderer.removeListener('media:pause',listener);},
+ readerSetActive:id=>ipcRenderer.invoke('reader:activeItem',id),readerPreferences:(type,value)=>ipcRenderer.invoke('reader:preferences',type,value),onReaderActivate:callback=>ipcRenderer.on('reader:activate',(_,id)=>callback(id)),readerCapture:rect=>ipcRenderer.invoke('reader:capture',rect),readerLookup:request=>ipcRenderer.invoke('reader:lookup',request),readerLookupCancel:()=>ipcRenderer.invoke('reader:lookupCancel'),readerOcr:data=>ipcRenderer.invoke('reader:ocr',data),readerOcrCancel:()=>ipcRenderer.invoke('reader:ocrCancel'),readerCatalog:()=>ipcRenderer.invoke('reader:catalog'),readerWindowCommand:(command,value)=>ipcRenderer.invoke('reader:windowCommand',command,value),launchReader:id=>ipcRenderer.invoke('reader:launch',id),readerFonts:()=>ipcRenderer.invoke('reader:fonts'),pickCover:()=>ipcRenderer.invoke('cover:pick'),readerInit:()=>ipcRenderer.invoke('reader:init'),openReader:id=>ipcRenderer.invoke('reader:open',id),closeReader:()=>ipcRenderer.invoke('reader:close'),
+ compatibleVideo:url=>ipcRenderer.invoke('reader:compatibility',url),stopCompatibleVideo:()=>ipcRenderer.invoke('reader:stopCompatibility'),
+ saveReaderProgress:(id,value)=>ipcRenderer.invoke('reader:progress',id,value),pickSubtitle:()=>ipcRenderer.invoke('reader:subtitle'),openExternal:p=>ipcRenderer.invoke('external:open',p),
+ minimize:()=>ipcRenderer.invoke('window:minimize'),toggleMaximize:()=>ipcRenderer.invoke('window:toggleMaximize'),close:()=>ipcRenderer.invoke('window:close'),
+ onWindowState:callback=>ipcRenderer.on('window:state',(_,v)=>callback(v)),onReaderAppearance:callback=>ipcRenderer.on('reader:appearance',(_,v)=>callback(v))
+});

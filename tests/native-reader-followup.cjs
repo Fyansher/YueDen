@@ -1,0 +1,20 @@
+module.exports=async({w,js,check,until,root,windows,wait})=>{
+ const fs=require('node:fs'),path=require('node:path'),mobi=path.join(root,'reader.mobi');fs.writeFileSync(mobi,require('./mobi-fixture.cjs')());
+ const run=c=>js(w,'(async()=>{'+c+'})()');
+ await run(`state=await native.saveLibrary({items:[{id:'book',name:'MOBI测试',type:'book',localPath:${JSON.stringify(mobi)},localFiles:[{path:${JSON.stringify(mobi)},name:'reader.mobi'}],rating:0},{id:'game',name:'卡片测试',type:'game',rating:2,genres:['动作']}],categories:[]});activeView='game';render()`);
+ check('扫描类型默认当前影视页面',await js(w,"localPreviewRow({id:'x',name:'x',type:'anime',localFiles:[],classification:{type:'unknown_collection'}},{type:'movie'}).type==='movie'"));
+ await run("const original=native.localMetadata;window.followupBundle={integrated:[{name:'卡片测试',metadataSource:'Steam'}],sources:[]};window.followupResult=await Promise.all(prefetchLocalMetadata({online:true},[{id:'scan',itemId:'game',type:'game',metadataBundle:followupBundle}]));");check('导入直接复用已获取候选',await js(w,'followupResult[0].bundle===followupBundle'));
+ check('零星不显示0/5',await js(w,"!cardPersonal({rating:0}).includes('0 / 5')"));
+ await run("openCardQuickEdit('game','name',{x:400,y:200});const input=document.querySelector('[data-quick-input]');input.value='自动保存名称';input.dispatchEvent(new Event('input',{bubbles:true}));");await until(()=>js(w,"state.items.find(i=>i.id==='game').name==='自动保存名称'"));
+ check('右键无取消保存且输入自动持久化',await js(w,"!document.querySelector('[data-quick-save]')&&cardQuickEditor.textContent.includes('已更新')"));await run('closeCardQuickEdit()');
+ await run("const host=document.querySelector('.card-personal');host.setPointerCapture=()=>{};host.releasePointerCapture=()=>{};const r=host.getBoundingClientRect();host.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,button:0,pointerId:4,clientX:r.left+r.width*.7}));host.dispatchEvent(new PointerEvent('pointerup',{bubbles:true,button:0,pointerId:4,clientX:r.left+r.width*.7}));");await until(()=>js(w,"state.items.find(i=>i.id==='game').rating===3.5"));check('卡片左键星星拖动保存半星（合成指针事件）',true);
+ await run("librarySelection.active=true;const host=document.querySelector('.card-personal');const r=host.getBoundingClientRect();host.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,button:0,pointerId:5,clientX:r.left+r.width}));host.dispatchEvent(new PointerEvent('pointerup',{bubbles:true,button:0,pointerId:5,clientX:r.left+r.width}));");check('筛选模式禁止拖动改评分',await js(w,"state.items.find(i=>i.id==='game').rating===3.5"));await run('librarySelection.active=false;await native.launchReader("book")');
+ await until(()=>windows.some(v=>v!==w&&v.webContents.getURL().endsWith('reader.html')));const reader=windows.find(v=>v!==w&&v.webContents.getURL().endsWith('reader.html'));
+ await until(()=>js(reader,"!!mediaSession?.controller||!!document.querySelector('#readerMessage.is-error')"));
+ check('真实MOBI解码进入EPUB阅读引擎并显示中文正文：'+await js(reader,"document.querySelector('#readerMessage')?.textContent"),await js(reader,"[...document.querySelectorAll('iframe')].some(f=>f.contentDocument?.body?.textContent.includes('真实解码正文'))"));
+ await wait(700);
+ fs.writeFileSync(path.resolve(__dirname,'../docs/screenshots/mobi-reader.png'),(await reader.webContents.capturePage()).toPNG());
+ const protectedBytes=require('./mobi-fixture.cjs')(undefined,true).toString('base64');
+ check('加密MOBI明确拒绝而不尝试绕过',await run(`const m=await import('./reader-mobi.mjs'),url=URL.createObjectURL(new Blob([Uint8Array.from(atob(${JSON.stringify(protectedBytes)}),c=>c.charCodeAt(0))]));try{await m.openMobi({file:{url},loadAbort:new AbortController()},()=>true,()=>{throw Error('不应进入正文引擎');});return false;}catch(e){return e.message.includes('DRM');}finally{URL.revokeObjectURL(url);}`));
+ check('阅读未修改源文件',fs.readFileSync(mobi).equals(require('./mobi-fixture.cjs')()));
+};

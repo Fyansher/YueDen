@@ -1,0 +1,5 @@
+const test=require('node:test'),assert=require('node:assert/strict'),Order=require('../app/audio-browser-order');
+test('song identity includes resource so duplicate track IDs never collide',()=>{assert.notEqual(Order.trackId({item:{id:'a'},track:{id:'t'}}),Order.trackId({item:{id:'b'},track:{id:'t'}}));});
+test('filtered reorder preserves hidden slots and rejects stale/duplicate IDs',()=>{assert.deepEqual(Order.merge(['a','hidden','b','c'],['c','a']),['c','hidden','b','a']);assert.throws(()=>Order.merge(['a'],['missing']));assert.throws(()=>Order.merge(['a'],['a','a']));});
+test('playlist identities retain legacy duplicate occurrences and explicit stable IDs',()=>{assert.deepEqual(Order.entryIds([{id:'e',itemId:'a',trackId:'t'},{itemId:'a',trackId:'t'},{itemId:'b',trackId:'t'}]),['e','["a","t",1]','["b","t",0]']);});
+test('manual presentation does not mutate library or album tracks and new rows remain visible',()=>{const rows=[{id:'a'},{id:'b'},{id:'c'}],before=JSON.stringify(rows);assert.deepEqual(Order.apply(rows,['b','a'],r=>r.id).map(r=>r.id),['b','a','c']);assert.equal(JSON.stringify(rows),before);});

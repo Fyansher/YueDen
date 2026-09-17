@@ -1,0 +1,3 @@
+/* A request belongs to one playback generation; no provider or media engine duplication. */
+function create({timeoutMs=15000}={}){let controller=null,ticket=0,result=null;return {cancel(){ticket++;controller?.abort();controller=null;result=null;},async search(work){this.cancel();const id=ticket;controller=new AbortController();const signal=AbortSignal.any([controller.signal,AbortSignal.timeout(timeoutMs)]);const value=await work(signal);signal.throwIfAborted();if(id!==ticket)throw new DOMException('歌曲已切换','AbortError');result=value;return value;},selected(){if(!result)throw Error('歌词候选已过期，请重新搜索');return result;}};}
+module.exports={create};

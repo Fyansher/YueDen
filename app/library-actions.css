@@ -1,0 +1,50 @@
+/* Native text rasterisation at rest; transforms exist only while interacting. */
+:root { font-family: "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif; font-synthesis: none; text-rendering: auto; }
+.view-panel:not(.hidden) { animation-fill-mode: none; }
+.resource-card, .tag-card { will-change: auto; }
+.brand-glyph { display:block; width:24px; height:24px; background:none; box-shadow:none; border-radius:0; object-fit:contain; }
+#editorForm .field-scrollbox > .scrollable-field { font-size:13px; }
+.field, .field-caption { font-size:13px; }
+.resource-card .card-title { font-size:14px; line-height:18px; }
+.small-layout .resource-card .card-title { font-size:13px; line-height:17px; }
+.toolbar-actions { flex-wrap:wrap; justify-content:flex-end; }
+.batch-actions { display:inline-flex; align-items:center; gap:5px; animation:batchReveal .42s cubic-bezier(.2,1.45,.35,1); }
+.batch-icon { width:34px; height:34px; display:grid; place-items:center; padding:7px; border:1px solid var(--line); border-radius:9px; background:var(--panel-2); color:var(--text); transition:transform .28s cubic-bezier(.2,1.5,.35,1),background .18s,border-color .18s; cursor:pointer; }
+.batch-icon svg { width:18px; height:18px; pointer-events:none; }
+.batch-icon:hover:not(:disabled) { background:var(--panel-3); border-color:var(--accent); }
+.batch-icon:disabled { opacity:.38; cursor:default; }
+.batch-delete { color:var(--danger,#ed8592); }
+.batch-delete[aria-disabled="true"] { color:var(--muted); }
+.batch-delete.drag-delete-over { color:var(--danger,#ed8592); transform:scale(1.22); border-color:currentColor; background:color-mix(in srgb,var(--danger,#ed8592) 16%,var(--panel)); box-shadow:0 0 0 4px color-mix(in srgb,var(--danger,#ed8592) 15%,transparent); }
+.batch-summary,.batch-progress { display:flex; align-items:center; flex-wrap:wrap; gap:14px; min-height:35px; margin:0 0 12px; font-size:12px; color:var(--muted); }
+.batch-summary button,.batch-progress button { color:var(--accent); background:none; border:0; padding:5px 2px; cursor:pointer; }
+.batch-summary #batchExit { margin-left:auto; color:var(--muted); }
+.batch-progress { padding:4px 12px; border-radius:9px; background:var(--panel-2); }
+.batch-progress button { margin-left:auto; }
+.resource-card .card-select { position:absolute; left:8px; top:8px; z-index:9; width:23px; height:23px; cursor:pointer; margin:0; display:grid; place-items:center; }
+.card-select input { position:absolute; opacity:0; width:100%; height:100%; margin:0; cursor:pointer; }
+.card-select span { display:grid; place-items:center; width:20px; height:20px; border:1.5px solid #dde7e6; border-radius:6px; background:#152b36e6; box-shadow:0 1px 5px #0005; transition:background .16s,transform .22s cubic-bezier(.2,1.5,.35,1); pointer-events:none; }
+.card-select input:checked + span { background:var(--accent); color:#102323; border-color:var(--accent); transform:scale(1.08); }
+.card-select input:checked + span::after { content:""; width:8px; height:4px; border:solid currentColor; border-width:0 0 2px 2px; transform:translateY(-1px) rotate(-45deg); }
+.card-select input:focus-visible + span { outline:2px solid var(--text); outline-offset:3px; }
+.selection-mode .card-identifiers { visibility:hidden; }
+#libraryGrid .resource-card.is-selected { border-color:var(--accent); box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 65%,transparent); }
+.batch-category-field { display:grid; gap:8px; font-size:13px; margin:16px 0; }
+.batch-category-field input { width:100%; padding:10px; border:1px solid var(--line); border-radius:8px; background:var(--panel-2); color:var(--text); }
+.batch-keep-label { display:flex; gap:8px; align-items:center; font-size:12px; margin:12px 0 20px; }
+.batch-keep-label input { accent-color:var(--accent); }
+#editorForm .local-note-row,#editorForm .link-fields { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; align-items:start; }
+#editorForm .link-fields:has(#resourceField.hidden) { grid-template-columns:1fr; }
+#editorForm .inline-path { gap:6px; max-width:none; align-items:flex-end; }
+#editorForm .inline-path > button { padding-inline:9px; font-size:12px; }
+#editorForm .inline-path > .text-button { padding-inline:4px; }
+#localPathField { padding-top:0; }
+.source-division-links { margin:12px 2px; color:var(--muted); font-size:12px; }
+.source-division-links summary { cursor:pointer; padding:8px 0; }
+.source-division-links .source-website-button { margin:4px; }
+@keyframes batchReveal { from { opacity:0; transform:translateX(-8px) scale(.86); } to { opacity:1; transform:none; } }
+@media (max-width:780px) { #editorForm .local-note-row,#editorForm .link-fields { grid-template-columns:1fr; } }
+@media (prefers-reduced-motion:reduce) { .batch-actions { animation:none; }.batch-icon,.card-select span { transition:none; } }
+.no-animations .batch-actions { animation:none; }
+
+.batch-category-field{position:relative}.batch-category-combo{display:flex;align-items:stretch;width:100%;min-width:0}.batch-category-combo input{flex:1;min-width:0;border-radius:var(--control-radius) 0 0 var(--control-radius)!important}.batch-category-toggle{flex:0 0 36px;background:var(--panel-2);color:var(--text);border:1px solid var(--line);border-left:0;border-radius:0 var(--control-radius) var(--control-radius) 0}.batch-category-options{display:grid;max-height:220px;overflow:auto;margin-top:4px;padding:4px;background:var(--panel-2);color:var(--text);border:1px solid var(--line);border-radius:var(--control-radius);box-shadow:var(--shadow)}.batch-category-options[hidden]{display:none}.batch-category-options [role=option]{display:block;width:100%;text-align:left;padding:8px 10px;border-radius:var(--control-radius);background:transparent;color:var(--text);overflow-wrap:anywhere}.batch-category-options [role=option]:hover,.batch-category-options [aria-selected=true]{background:color-mix(in srgb,var(--accent) 18%,var(--panel));color:var(--accent)}.batch-category-empty{padding:8px 10px;font-size:var(--font-small);color:var(--muted)}.batch-category-combo :focus-visible{outline:2px solid var(--accent);outline-offset:2px}

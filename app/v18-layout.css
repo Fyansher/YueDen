@@ -1,0 +1,44 @@
+/* Compact information area, not artificially tall covers or doubled footer rows. */
+.library-grid.portrait-layout { grid-template-columns:repeat(auto-fill,minmax(min(clamp(144px,8.5vw,172px),100%),1fr)); }
+.library-grid:not(.portrait-layout):not(.list-layout):not(.small-layout) { grid-template-columns:repeat(auto-fill,minmax(min(clamp(246px,16vw,300px),100%),1fr)); }
+.library-grid:not(.list-layout):not(.small-layout) .resource-card { grid-template-rows:auto 136px; }
+.library-grid:not(.list-layout):not(.small-layout) .card-body { height:136px; padding:8px 10px; gap:2px; }
+.library-grid .card-tag-rows { height:37px; min-height:37px; gap:3px; }
+.library-grid .card-genre-tags,.library-grid .card-category-tags { height:17px; min-height:17px; }
+.library-grid .card-tag,.library-grid .card-tag-more { line-height:17px; }
+.library-grid:not(.list-layout):not(.small-layout) .card-creator:empty { display:none; }
+.library-grid:not(.list-layout):not(.small-layout) .card-foot { display:flex; flex-wrap:nowrap; min-height:22px; height:22px; margin-top:auto; padding:0; gap:5px; }
+.library-grid:not(.list-layout):not(.small-layout) .card-foot .card-year { margin-left:auto; }
+.library-grid:not(.list-layout):not(.small-layout) .card-foot .card-actions { gap:3px; }
+.library-grid:not(.list-layout):not(.small-layout) .card-actions .card-action { width:20px; height:20px; font-size:12px; line-height:16px; }
+.library-grid.portrait-layout .card-foot .stars { font-size:11px; letter-spacing:0; }
+.library-grid .category-placeholder { font-size:11px; color:var(--muted); opacity:.8; }
+.library-grid.list-layout .card-category-tags:has(.category-placeholder) { display:flex; }
+.library-grid.portrait-layout .card-foot { gap:3px; }
+.library-grid.portrait-layout .card-foot .card-actions { gap:2px; }
+.library-grid.portrait-layout .card-actions .card-action { width:18px; height:18px; }
+.library-grid.portrait-layout .card-foot .card-personal { flex:none; }
+.library-grid.portrait-layout .card-foot .card-year { font-size:10px; }
+.library-grid.portrait-layout:not(.list-layout):not(.small-layout) .resource-card { grid-template-rows:auto 148px; }
+.library-grid.portrait-layout:not(.list-layout):not(.small-layout) .card-body { height:148px; }
+.library-grid.portrait-layout:not(.list-layout):not(.small-layout) .card-foot { display:grid; grid-template-columns:minmax(0,1fr) auto; grid-template-rows:16px 18px; height:34px; min-height:34px; gap:1px 5px; }
+.library-grid.portrait-layout:not(.list-layout):not(.small-layout) .card-foot .card-personal { grid-column:1; grid-row:1; }
+.library-grid.portrait-layout:not(.list-layout):not(.small-layout) .card-foot .card-year { grid-column:2; grid-row:1; margin:0; font-size:11px; }
+.library-grid.portrait-layout:not(.list-layout):not(.small-layout) .card-foot .card-actions { grid-column:1 / -1; grid-row:2; justify-content:flex-end; }
+.card-quick-editor .quick-stars { width:200px; height:40px; display:flex; position:relative; touch-action:none; }
+.quick-stars .quick-star-cell { width:40px; height:40px; flex:none; position:relative; }
+.quick-star-cell svg { width:100%; height:100%; display:block; }
+.quick-star-cell .quick-star-base { fill:var(--line); }
+.quick-star-cell .quick-star-lit { position:absolute; inset:0 auto 0 0; overflow:hidden; }
+.quick-star-cell .quick-star-lit svg { width:40px; height:40px; fill:var(--warn); }
+.quick-stars:focus-within { outline:none; box-shadow:none; }
+.card-quick-editor .quick-stars input { outline:none; box-shadow:none; }
+.card-quick-editor input[type=text]:focus,.card-quick-editor input[type=url]:focus { outline:1px solid var(--accent); border-color:var(--accent); box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 15%,transparent); }
+.card-quick-editor[data-kind=name] input,.card-quick-editor[data-kind=storeUrl] input { border-color:color-mix(in srgb,var(--accent) 65%,var(--line)); }
+.scan-options { display:flex; flex-wrap:wrap; gap:10px 20px; margin:8px 0 14px; color:var(--muted); font-size:12px; }
+.scan-options label,.scan-confirm { display:flex; align-items:center; gap:8px; }
+.scan-evidence,.scan-skipped { color:var(--muted); font-size:12px; margin:10px 0; overflow-wrap:anywhere; }
+.scan-evidence summary,.scan-skipped summary { cursor:pointer; color:var(--text); }
+.scan-evidence p,.scan-skipped p { line-height:1.6; margin:6px 0; }
+.scan-skipped>div { max-height:200px; overflow:auto; }
+.scan-confirm { margin-top:12px; color:var(--warn); font-size:12px; }

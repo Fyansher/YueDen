@@ -1,0 +1,54 @@
+[
+  {"name":"@lingo-reader/mobi-parser","version":"0.4.6","license":"MIT","files":["mobi-parser.min.mjs"],"note":"Includes @lingo-reader/shared and fflate; licenses in vendor/licenses. Optional EXTH guard applied by packaging/build-mobi.cjs."},
+  {
+    "name": "hls.js",
+    "version": "1.6.13",
+    "license": "Apache-2.0",
+    "files": [
+      "hls.min.js"
+    ]
+  },
+  {
+    "name": "dashjs",
+    "version": "5.0.3",
+    "license": "BSD-3-Clause",
+    "files": [
+      "dash.all.min.js"
+    ]
+  },
+  {
+    "name": "epubjs",
+    "version": "0.3.93",
+    "license": "BSD-2-Clause",
+    "files": [
+      "epub.min.js"
+    ]
+  },
+  {
+    "name": "jszip",
+    "version": "3.10.1",
+    "license": "(MIT OR GPL-3.0-or-later)",
+    "files": [
+      "jszip.min.js"
+    ]
+  },
+  {
+    "name": "dompurify",
+    "version": "3.4.15",
+    "license": "(MPL-2.0 OR Apache-2.0)",
+    "files": [
+      "purify.min.js"
+    ]
+  },
+  {
+    "name": "pdfjs-dist",
+    "version": "4.10.38",
+    "license": "Apache-2.0",
+    "files": [
+      "pdf.min.mjs",
+      "pdf.worker.min.mjs",
+      "cmaps",
+      "standard_fonts"
+    ]
+  }
+]

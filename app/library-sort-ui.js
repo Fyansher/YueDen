@@ -1,0 +1,10 @@
+const librarySorting={
+ excluded(){return activeView==='audio'&&window.audioBrowser?.view==='playlists'?['rating','releaseDate']:activeView==='audio'&&window.audioBrowser?.view==='songs'?['rating']:[];},
+ key(){return activeView+(activeView==='audio'?':'+(window.audioBrowser?.view||'all'):'');},
+ preferences(){try{const p=LibrarySort.normalize(JSON.parse(localStorage.getItem('librarySort:'+this.key())||'null'));return this.excluded().includes(p.field)?LibrarySort.normalize():p;}catch{return LibrarySort.normalize();}},
+ isCustom(){return true;},
+ apply(items){return LibrarySort.sort(items.map(i=>({...i,lastOpenedAt:window.usageData?.[i.id]?.openedAt||i.lastOpenedAt})),this.preferences());},
+ render(){let host=document.getElementById('librarySort');if(!host){host=document.createElement('div');host.id='librarySort';host.className='library-sort';host.innerHTML='<select aria-label="排序字段"><option value="" hidden disabled>排序方式</option></select><button type="button" aria-label="切换排序方向"></button>';for(const [value,label]of Object.entries(LibrarySort.fields).filter(([value])=>value!=='custom')){const o=document.createElement('option');o.value=value;o.textContent=label;host.querySelector('select').append(o);}const save=next=>{try{localStorage.setItem('librarySort:'+this.key(),JSON.stringify(next));}catch{showToast('排序偏好保存失败','error');}renderLibrary();};host.querySelector('select').onchange=e=>save({...this.preferences(),field:e.target.value,manual:false});refreshUsage().then(()=>renderLibrary());host.querySelector('button').onclick=()=>{const p=this.preferences();save({...p,direction:p.direction==='asc'?'desc':'asc',manual:false});};}
+ for(const o of host.querySelector('select').options)o.hidden=this.excluded().includes(o.value);const p=this.preferences();host.querySelector('select').value=p.field==='custom'?'':p.field;const b=host.querySelector('button');b.textContent=p.direction==='asc'?'↑':'↓';b.title=p.direction==='asc'?'升序':'降序';host.title='随时拖动卡片可调整顺序；再次选择排序字段时重新排列';document.querySelector('#librarySearchHeader .toolbar-actions')?.prepend(host);
+ }
+};

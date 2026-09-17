@@ -1,0 +1,5 @@
+const fs=require('node:fs'),path=require('node:path'),cp=require('node:child_process');
+const root=path.resolve(__dirname,'../../../tests');
+const names=['contexts','identity','metadata','metadata-ipc','migration','portable-relations','preservation','relations','scanner','scan-followup','scan-budget','scan-installation-ownership','scan-mixed-package','scan-software-admission','scan-directory-preview','scan-platform-naming','scan-folder-policy','scan-live-stability','scan-reader-followup','import-reader-policy','entry-audio-followup','sorting','reader-feature-contracts','reader-annotations-model','reader-translation','reader-polish'];
+const result=cp.spawnSync(process.execPath,['--test','--test-reporter=spec',...names.map(n=>path.join(root,n+'.cjs'))],{encoding:'utf8',maxBuffer:8*1024*1024});
+const text=(result.stdout||'')+(result.stderr||'');fs.writeFileSync(path.resolve(__dirname,'../test-artifacts/legacy-regression.txt'),text);console.log(text.slice(-6000));process.exitCode=result.status===0?0:1;

@@ -1,0 +1,30 @@
+module.exports=async({w,js,check,wait,until,root})=>{
+ const fs=require('node:fs'),path=require('node:path'),{pe}=require('../../tests/scan-fixtures.cjs');
+ const folder=path.join(root,'目录归组样本');fs.mkdirSync(folder);for(const [file,title]of [['Play.exe','Moonlit Garden'],['custom.exe','Configuration Utility'],['Alternate.exe','Different Internal Product']])fs.writeFileSync(path.join(folder,file),pe(title));
+ const run=code=>js(w,'(async()=>{'+code+'})()');
+ await run(`activeView='game';settings.scanOnline=false;settings.localResourceRoots={game:[${JSON.stringify(folder)}]};render();await openLocalImport('game');$('localScan').click();`);
+ await until(()=>js(w,'!localImportSession.busy&&localImportSession.rows.length>0'));
+ check('实际扫描同目录三入口只出现一条预览',await js(w,'localImportSession.rows.length===1&&localImportSession.rows[0].localFiles.length===3'));
+ check('名称右侧类型左侧有打开目录按钮',await js(w,"document.querySelector('.local-type').previousElementSibling.textContent==='打开目录'"));
+ check('没有额外确认勾选框',await js(w,"!document.querySelector('.scan-confirm')"));
+ await run("document.querySelector('.local-uncertain').open=true;document.querySelector('.scan-evidence').open=true;const select=document.querySelector('.local-type');select.value='game';select.dispatchEvent(new Event('change'));");
+ check('选择类型立即显示游戏且说明不折叠',await js(w,"document.querySelector('.local-type').value==='game'&&document.querySelector('.scan-evidence').open&&localImportSession.rows[0].confirmed"));
+ check('配置工具保留文件归属但不作为默认启动选项',await js(w,"![...document.querySelectorAll('.local-row-options select option')].some(o=>o.value.endsWith('custom.exe'))"));
+ await run("const b=document.querySelector('.local-check');b.checked=true;b.dispatchEvent(new Event('change'));$('localCommit').click()");
+ await until(()=>js(w,'!localImportSession.busy&&localImportSession.rows[0].imported'));
+ check('真实导入只生成一条且保存所有入口',await js(w,'state.items.length===1&&state.items[0].localFiles.length===3'));
+ await run("closeLocalImport();state.items[0].name='人工修正名称';state.items[0].rating=4.5;state.items[0].noteUrl='obsidian://open?path=fixture';state.items[0].localPath=state.items[0].localFiles.find(f=>f.name==='Play.exe').path;state=await native.saveLibrary(state);await openLocalImport('game');$('localScan').click()");
+ await until(()=>js(w,'!localImportSession.busy&&localImportSession.rows.length>0'));
+ check('重扫仍然一组并保留人工名称与入口',await js(w,"localImportSession.rows.length===1&&localImportSession.rows[0].name==='人工修正名称'&&localImportSession.rows[0].localPath.endsWith('Play.exe')"));
+ await run("$('localCommit').click()");await until(()=>js(w,'!localImportSession.busy&&localImportSession.rows.every(r=>r.imported)'));
+ check('再次导入不新增条目、不丢评分笔记',await js(w,"state.items.length===1&&state.items[0].rating===4.5&&state.items[0].noteUrl.includes('fixture')"));
+ await run('closeLocalImport();state=await native.loadLibrary();render()');
+ check('重新加载仍保留三文件及人工入口',await js(w,"state.items[0].localFiles.length===3&&state.items[0].localPath.endsWith('Play.exe')"));
+ await run("await openLocalImport('game');$('localScan').click()");await until(()=>js(w,'!localImportSession.busy'));
+ await run("document.querySelector('.local-existing').open=true;document.querySelector('.scan-evidence').open=true");await wait(150);
+ fs.writeFileSync(path.resolve(__dirname,'../docs/screenshots/scanner-directory-preview.png'),(await w.webContents.capturePage()).toPNG());
+ await run('closeLocalImport()');
+ const {dialog}=require('electron'),original=dialog.showOpenDialog;let received;const explicit=path.join(root,'明确多选');fs.mkdirSync(explicit);const files=['One.exe','Two.exe'].map(n=>{const p=path.join(explicit,n);fs.writeFileSync(p,pe(n));return p;});
+ dialog.showOpenDialog=async(...args)=>{received=args.at(-1);return {canceled:false,filePaths:files};};
+ try{await run("await openLocalImport('game');$('localAddFiles').click()");await until(()=>js(w,'!localImportSession.busy&&state.items.length===3'));check('原生运行时多文件导入接通（文件对话框返回值模拟）',received.properties.includes('multiSelections')&&received.filters.some(f=>f.extensions.includes('*')));check('明确选文件不污染持久扫描范围',await js(w,"!settings.localResourceRoots.game.some(p=>p.includes('明确多选'))"));check('两份明确选择文件均保存且没有导入相邻原目录',await js(w,"state.items.filter(i=>i.localPath.includes('明确多选')).length===2"));}finally{dialog.showOpenDialog=original;await run('closeLocalImport()');}
+};

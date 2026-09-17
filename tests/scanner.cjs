@@ -1,0 +1,4 @@
+const appModule=require('./app-module.cjs');
+const test=require('node:test'),assert=require('node:assert/strict'),Entries=appModule('scan-application-entries');
+function row(file,id='game1'){return {type:'game',localPath:file,localFiles:[{path:file,name:file.split('/').at(-1)}],identifiers:{verifiedProduct:id},boundary:{kind:'individual_application',root:file.slice(0,file.lastIndexOf('/')),ownedPaths:[file]},evidence:[],warnings:[]};}
+test('launcher 和 bin 主入口同安装归组，设置卸载不成为主入口，不吞并独立软件',()=>{const out=Entries.mergeEntries([row('D:/package/Launcher.exe'),row('D:/package/bin/Game.exe'),row('D:/package/config.exe'),row('D:/package/uninstall.exe'),row('D:/package/Tool.exe','tool1'),{type:'book',localPath:'D:/package/Novel.epub'}]);assert.equal(out.length,3);assert.equal(out[0].localPath,'D:/package/bin/Game.exe');assert.equal(out[0].localFiles.length,4);assert.equal(out[1].localPath,'D:/package/Tool.exe');});
