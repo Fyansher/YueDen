@@ -46,7 +46,7 @@ function patchLibraryCard(id){
  copy(card.querySelector('.card-body'),fresh.querySelector('.card-body'));
  copy(card.querySelector('.card-cover .card-identifiers'),fresh.querySelector('.card-cover .card-identifiers'));
  copy(card.querySelector('.card-cover .status-pill'),fresh.querySelector('.card-cover .status-pill'));
- copy(card.querySelector(':scope>.list-ratings'),fresh.querySelector(':scope>.list-ratings'));copy(card.querySelector(':scope>.card-actions'),fresh.querySelector(':scope>.card-actions'));
+ copy(card.querySelector('.list-ratings'),fresh.querySelector('.list-ratings'));copy(card.querySelector('.card-actions'),fresh.querySelector('.card-actions'));
  const cover=card.querySelector('.card-cover');if(cover){cover.setAttribute('aria-label',(['game','software','unknown_application'].includes(item.type)?'启动':'播放 / 阅读')+' '+item.name);cover.querySelector('img')?.setAttribute('alt',item.name);cover.title=(item.localPath||item.localFiles?.length||item.resourceUrl)?(item.type==='game'?'启动游戏':'打开播放器 / 阅读器'):'添加本地路径后打开';
   const count=LocalModel.members(item).length,multiple=item.type!=='game'&&count>1;card.classList.toggle('multiple-resource',multiple);cover.querySelector('.local-count')?.remove();if(multiple){const badge=document.createElement('span');badge.className='local-count';badge.textContent='▱ '+count;badge.title='包含 '+count+' 个本地文件';cover.append(badge);}
  }

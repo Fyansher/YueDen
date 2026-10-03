@@ -12,7 +12,7 @@ function create({directory,safeStorage}){
   delete next.credentialsUnavailable;if(changed)atomic(file(),v);return next;
  }
  function migrate(config,settingsPath){if(!KEYS.some(k=>config[k]&&config[k]!==STORED))return hydrate(config);if(!available())throw Error('系统安全存储不可用，尚未迁移旧凭据；原设置保持不变');const backup=settingsPath+'.before-secrets.enc';if(!fs.existsSync(backup))fs.writeFileSync(backup,safeStorage.encryptString(JSON.stringify(config)),{flag:'wx'});const clean=prepare(config);atomic(settingsPath,clean);return hydrate(clean);}
- function resolve(input,stored){if(input.webdavPassword===STORED&&((input.webdavUrl!=null&&input.webdavUrl!==stored.webdavUrl)||(input.webdavUsername!=null&&input.webdavUsername!==stored.webdavUsername)))throw Error('连接地址或用户名已改变，请重新输入此连接密码');const next={...stored,...input};for(const k of KEYS)if(next[k]===STORED)next[k]=stored[k]||'';return next;}
+ function resolve(input,stored){if(input.webdavPassword===STORED){let changedServer=false;if(input.webdavUrl!=null&&input.webdavUrl!==stored.webdavUrl){try{changedServer=new URL(input.webdavUrl).origin!==new URL(stored.webdavUrl).origin;}catch{changedServer=true;}}if(changedServer||(input.webdavUsername!=null&&input.webdavUsername!==stored.webdavUsername))throw Error('WebDAV 服务器或用户名已改变，请重新输入此连接密码');}const next={...stored,...input};for(const k of KEYS)if(next[k]===STORED)next[k]=stored[k]||'';return next;}
  return {prepare,hydrate,migrate,resolve,publicSettings};
 }
 module.exports={create,publicSettings,KEYS,STORED};

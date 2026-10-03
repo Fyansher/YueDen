@@ -1,1 +1,1 @@
-export function auxVisible(main:{exists:boolean;shown:boolean;minimized:boolean;fullscreen:boolean},userVisible:boolean):boolean{return userVisible&&main.exists&&main.shown&&!main.minimized&&!main.fullscreen;}
+export function auxVisible(main:{exists:boolean;shown:boolean;minimized:boolean;fullscreen:boolean;maximized?:boolean},userVisible:boolean):boolean{return userVisible&&main.exists&&main.shown&&!main.minimized&&!main.fullscreen&&!main.maximized;}

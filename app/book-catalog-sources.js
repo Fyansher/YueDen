@@ -1,5 +1,5 @@
 const H=require('./metadata-html'),Runtime=require('./metadata-runtime');
-const origins={tstrs:'https://tstrs.me',onelib:'https://zh.1lib.sk'};
+const origins={tstrs:'https://tstrs.me',onelib:'https://1lib.sk'};
 function url(value,origin){try{const u=new URL(value,origin);return u.origin===origin&&/^\/book\/[\w-]+(?:\/[\w%-]+)?\/?$/.test(u.pathname)?u.href:'';}catch{return '';}}
 function parseSearch(html,id){if(!html)return [];const origin=origins[id],blocks=id==='tstrs'?H.blocks(html,'div',a=>/^sr-\d+$/.test(a.id||'')):H.blocks(html,'a',a=>Boolean(url(a.href,origin)));const result=[];for(const block of blocks){const link=id==='tstrs'?H.attributes(block.body.match(/<a\b[^>]*>/i)?.[0]||'').href:block.attrs.href;const target=url(link,origin);if(!target||result.some(v=>v.storeUrl===target))continue;const title=id==='tstrs'?H.text(block.body.match(/<b[^>]*>([\s\S]*?)<\/b>/i)?.[1]):H.text(block.body);if(!title)continue;result.push({id:id+'-'+new URL(target).pathname.split('/')[2],name:title,storeUrl:target,detailsUnavailable:true});}if(!result.length&&!/没有找到|未找到相关|没有搜索到|No books found|Nothing found|0 results/i.test(H.text(html)))throw new SyntaxError('书籍搜索页结构无法识别');return result.slice(0,5);}
 function field(value){const text=H.text(value);return /^(?:【)?(?:未找到(?:作者|出版社)?信息|暂无(?:简介|描述|信息)|无简介)(?:】)?$/.test(text)?'':text;}

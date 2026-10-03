@@ -2,6 +2,16 @@
   "note": "App files present in the Windows release were hash-compared; build sources and tests not shipped in the release are marked false. Binaries and generated dist are excluded.",
   "files": [
     {
+      "sha256": "8b9c3028d6467ff3be7c793141927841d70f47f52d0590677438f488ca154992",
+      "path": ".gitattributes",
+      "includedInRelease": false
+    },
+    {
+      "includedInRelease": false,
+      "path": ".gitignore",
+      "sha256": "f02380938fda5db5a1176f2b400d19fc799d4b20c07ac1baf4a0c1383fca7515"
+    },
+    {
       "path": "app/appearance.js",
       "includedInRelease": true,
       "sha256": "46fcbe666899217e413a6bf4529dd2e53b2ca4687bfca3b9692b4a296ec7eff6"
@@ -10,6 +20,41 @@
       "path": "app/application-identity.js",
       "includedInRelease": true,
       "sha256": "4febfb50bab4f1a6639850f55ee731ca348e741b4a166f4285f4bee6806720ad"
+    },
+    {
+      "path": "app/assets/icon.ico",
+      "includedInRelease": true,
+      "sha256": "262a71020d207874ae9f0b54756bf4fb6ec7a8ae5b51f2cd75e1aa350744f96b"
+    },
+    {
+      "path": "app/assets/icon.png",
+      "includedInRelease": true,
+      "sha256": "c4afc101bc951861ba1caeee84f9324d0bf28ff145ef964e9c810767b597c233"
+    },
+    {
+      "path": "app/assets/icon.svg",
+      "includedInRelease": true,
+      "sha256": "88034cff76af351784e7a90cdda6c2ab5792774af5bff8182448dde6585ddf83"
+    },
+    {
+      "path": "app/assets/taskbar-next.png",
+      "includedInRelease": true,
+      "sha256": "ada8af2737e8052ff511de42afd058f1e71fa8c80898415d82e12b57573c74ab"
+    },
+    {
+      "path": "app/assets/taskbar-pause.png",
+      "includedInRelease": true,
+      "sha256": "7100fe5ebd0cf8a177a3e753f0002d26a0eb993098b9de59f17ffa580a406d05"
+    },
+    {
+      "path": "app/assets/taskbar-play.png",
+      "includedInRelease": true,
+      "sha256": "eb0407d22da0d150a0618ca8fa2ef1f884c5f556cfd5b6a0da85e2243e75f725"
+    },
+    {
+      "path": "app/assets/taskbar-previous.png",
+      "includedInRelease": true,
+      "sha256": "be6e0543102b183c5649e4a28e80680146646afa421159b59cc3f9355ad949ea"
     },
     {
       "path": "app/audio-art.js",
@@ -54,7 +99,7 @@
     {
       "path": "app/audio-extras.js",
       "includedInRelease": true,
-      "sha256": "721273f419fcf84dcf2f522bee4ddc0e05e30ab5f7c1f76a3d378227f2ff2e80"
+      "sha256": "781f86c7b99a1a21ef72a59ef6e0409c91822ebdbcf3a3424b29efa7563b3a4f"
     },
     {
       "path": "app/audio-import-ui.js",
@@ -99,7 +144,7 @@
     {
       "path": "app/audio-panels.js",
       "includedInRelease": true,
-      "sha256": "cab9e62867c9a7de2737289775af03fbef2e7de50a3efe6093bd50f3b7043f3a"
+      "sha256": "45dad3f922c88ccd5776a73330306a517a4a5e13f58ac1858ea10941db919c5f"
     },
     {
       "path": "app/audio-player-layout.css",
@@ -114,7 +159,7 @@
     {
       "path": "app/audio-remote.js",
       "includedInRelease": true,
-      "sha256": "c80aae3d551696396e7a95149974bd9b58508713a96b1f0e9dbb8a256e4eb52c"
+      "sha256": "7fdc5ac7260f162c62ab7fbab5007951dfca89988214fde62d48962ecc7dbc4b"
     },
     {
       "path": "app/audio-scan-groups.js",
@@ -124,12 +169,12 @@
     {
       "path": "app/audio-service.js",
       "includedInRelease": true,
-      "sha256": "82d0fa282f98c8f5e1bf9a02b874002add13e2d2b3009d82219b86140472ff2d"
+      "sha256": "06252b0b150aaf5e87cb5767dc24009b97f468d1bb8a9d4c8ddf010eb044bd67"
     },
     {
       "path": "app/audio-ui.js",
       "includedInRelease": true,
-      "sha256": "e646aa576043a5827f9dbfec823e093dbe995d6dced5dc4e2515ddc30f0247b3"
+      "sha256": "bcfa82d4ab68e50259cc446b3e8ab119d5dbd09bd9b9fe2ea7b6a046b21c7b13"
     },
     {
       "path": "app/audio-window-preload.js",
@@ -159,7 +204,7 @@
     {
       "path": "app/book-catalog-sources.js",
       "includedInRelease": true,
-      "sha256": "58bfba761bdc4988a885fc365e559c7fb5405ff02c9b020f4a2c594119dd5c9b"
+      "sha256": "397e4a50eb39c5605f1e6649d29d7fcc5b61ea721e26f03a143795834d7f7674"
     },
     {
       "path": "app/candidate-covers.js",
@@ -172,9 +217,29 @@
       "sha256": "63c28f91caf8a4150b4a40622bd1e79220d59bcd1127dcb93aed2b4827132232"
     },
     {
+      "path": "app/codec/build-info.txt",
+      "includedInRelease": true,
+      "sha256": "6bd925193ada5e870f4875ee62d61ea00a58630531e2c84002d0bf308f642ad7"
+    },
+    {
+      "path": "app/codec/LICENSE-GPLv3.txt",
+      "includedInRelease": true,
+      "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903"
+    },
+    {
+      "path": "app/codec/LICENSE-LGPLv2.1.txt",
+      "includedInRelease": true,
+      "sha256": "246041b6ecf9bc32d718a62c57877c78b5eb397b6467e74ed7ae2626ab189c30"
+    },
+    {
+      "path": "app/codec/LICENSE-LGPLv3.txt",
+      "includedInRelease": true,
+      "sha256": "da7eabb7bafdf7d3ae5e9f223aa5bdc1eece45ac569dc21b3b037520b4464768"
+    },
+    {
       "path": "app/cover-store.js",
       "includedInRelease": true,
-      "sha256": "b9520bf9c162b0865ab2eeff43f79aa21e418ac9605f6e2c5ad034b9ba58d3ee"
+      "sha256": "b8bc572cddb5f58f49144da538e2054ba211f69662c32a9213fabd93212f3cc0"
     },
     {
       "path": "app/cover-ui.js",
@@ -200,6 +265,21 @@
       "path": "app/dialog-memory.js",
       "includedInRelease": true,
       "sha256": "cbce674536b91e7406ef188891684ddc3ca5ede296bd0a85294979755f950e89"
+    },
+    {
+      "path": "app/docs/player-feature-migration.md",
+      "includedInRelease": true,
+      "sha256": "6464a275c7bc92cf6c7a5503f9ba7e3e8c9630d6a3bca6b1cdba655aa26222fd"
+    },
+    {
+      "path": "app/docs/player-format-support.md",
+      "includedInRelease": true,
+      "sha256": "8c158d5c750290ca468ed5407f1912e6d368951935f45037ec31cda46e2064f4"
+    },
+    {
+      "path": "app/docs/player-third-party.md",
+      "includedInRelease": true,
+      "sha256": "545a6be716d38f46543496e803d65819c4ef588355387e6e6ba407bc318e2b16"
     },
     {
       "path": "app/editor-fields.js",
@@ -234,7 +314,7 @@
     {
       "path": "app/filter-ui.js",
       "includedInRelease": true,
-      "sha256": "550f874d91d4adbad59ae363dd313847369af61526c0be83cce7f4ab8f459171"
+      "sha256": "0b01f2d1d85fefb53418d5fc790db18d5f5919a4a148bd2e2c7c63e5d90e75d1"
     },
     {
       "path": "app/game-installations.js",
@@ -279,7 +359,7 @@
     {
       "path": "app/index.html",
       "includedInRelease": true,
-      "sha256": "5d4e8a2382880242b32b1ca5ecb2df7117fc67ecf83308fa44aa669a9506ad5d"
+      "sha256": "a5d0e927c4a015ecf24e983d4dfe375bfa07155944521c8761d76ee42e60b44e"
     },
     {
       "path": "app/interaction-fixes.css",
@@ -299,12 +379,12 @@
     {
       "path": "app/library-actions.css",
       "includedInRelease": true,
-      "sha256": "3cdf2f00260c9601879e3fb777da4401616bb8bdca3e93603aa169cbf985ed2a"
+      "sha256": "0d14f80218a3171fe6272db691b55104c3a04d4eb9fe1bc9cf0c9877904d24b0"
     },
     {
       "path": "app/library-cards.js",
       "includedInRelease": true,
-      "sha256": "23da6d5db4c859101562b2ed536f103663b7e431a999e0beeadfb157609494de"
+      "sha256": "ba581025530efa733ee1d44fbc3f91fbfadbfd11af749688674ecd23fb378c28"
     },
     {
       "path": "app/library-covers.js",
@@ -334,7 +414,7 @@
     {
       "path": "app/library-relations.js",
       "includedInRelease": true,
-      "sha256": "4dbf70a62e65ba37b59cd8dcfd42b9994cfa031ff47a65c3620a9921c8de3486"
+      "sha256": "88b2f80a0cfc7c9d8e9787481f631b58109b67f398fedc4265c553b536f1eb30"
     },
     {
       "path": "app/library-schema.js",
@@ -344,7 +424,7 @@
     {
       "path": "app/library-selection.js",
       "includedInRelease": true,
-      "sha256": "10b8a20c1ede079283c19325967d1f21e2cb559441d94e412b1d06f7a7cb2a9d"
+      "sha256": "85db62f8038da9d927ab6c4f1c46a06d7bc63dfb69650954b6c3a26d89516639"
     },
     {
       "path": "app/library-sort-ui.js",
@@ -409,7 +489,7 @@
     {
       "path": "app/main.js",
       "includedInRelease": true,
-      "sha256": "f3e8391cc85c4384081c09682bf8a5b0fd7468a33c926d9e0d5e6fd7ae1a162b"
+      "sha256": "4f055e79bc9d81d404048706ba85d2ca2cbed658553a7e55d6568ddeb4299cee"
     },
     {
       "path": "app/media-decoder.js",
@@ -464,7 +544,7 @@
     {
       "path": "app/metadata-sources.js",
       "includedInRelease": true,
-      "sha256": "0bf685876c3c63ff16c01e86afcd286186c9835a5d64914de7b5bffac918dfe4"
+      "sha256": "d96c2127a44b6f8ced6e7dababc2da372b2bfd32f2de910ff6727d34914f9cd3"
     },
     {
       "path": "app/metadata-text.js",
@@ -487,6 +567,11 @@
       "sha256": "25ef400699a2e59e8a2cf92346166da789544f443dc461c3ac5af39e7a75a6f0"
     },
     {
+      "path": "app/native/ResourcePicker.cs",
+      "includedInRelease": true,
+      "sha256": "9fef121d466eebb772b6bcd7e52f4e1bd334655924c42fa61c33ff4cc0b7a602"
+    },
+    {
       "path": "app/network-cache.js",
       "includedInRelease": true,
       "sha256": "4d10ecf74517b8be8a033bf88fcaf788ae168428dbb3d242f13b900cb23a2b53"
@@ -499,7 +584,7 @@
     {
       "path": "app/package.json",
       "includedInRelease": true,
-      "sha256": "315948bfeeec0ee25f4b0cd8f7062559e5d9e39134e2656f5d7cd7e1df71aab0"
+      "sha256": "231786a35d41d953d6354b675621965b81890bef8820511eedd37ded971eb205"
     },
     {
       "path": "app/path-picker.js",
@@ -519,7 +604,7 @@
     {
       "path": "app/playback-controls.js",
       "includedInRelease": true,
-      "sha256": "1096b755cf61326a9621254d2cda18d0a71cb8066d9f80b65db8ff7c49bd3a69"
+      "sha256": "1b3bbaa3fdef9a4e628300c0cfa8fbd09d79c374c2e7aebef18a3540823c37eb"
     },
     {
       "path": "app/player-library-order.js",
@@ -529,7 +614,7 @@
     {
       "path": "app/player-library.js",
       "includedInRelease": true,
-      "sha256": "54a37e3ca49dd5ddfa716e2e3bd5bebc52d685e09c517c1cd5769639a759185b"
+      "sha256": "bc4a2583073ba94ae73d2c2f8ea3650096a449cee4a871ebfb1756da8e842ec4"
     },
     {
       "path": "app/player-lyrics-job.js",
@@ -544,7 +629,7 @@
     {
       "path": "app/player-resource-request.js",
       "includedInRelease": true,
-      "sha256": "a2f1d6f7a5e305469c64fd03527617c3e71eda56388a6f829f2f9732f5595597"
+      "sha256": "9409db3f271f2ee326822ed139aa301a9ac43145111c0b01a43afa3a8e13cd23"
     },
     {
       "path": "app/player-source.js",
@@ -562,9 +647,284 @@
       "sha256": "b26015e026c0276dcd86f569d7705315a5a21541540dfaf4f627b66e321269b6"
     },
     {
+      "path": "app/player/audio-adapter.js",
+      "includedInRelease": true,
+      "sha256": "60999ae65870fb84df39e7a6306a98689924e8b1358fb5a933ca16f79e0803dc"
+    },
+    {
+      "path": "app/player/build-release.cjs",
+      "includedInRelease": false,
+      "sha256": "97b2cc4b59bb68cb5a74e3525590cedacbd3d0ab8b0ff7850b65798923be7bee"
+    },
+    {
+      "path": "app/player/dev-entry.cjs",
+      "includedInRelease": false,
+      "sha256": "b22e3c580ac08529751a97b371f910cf044b9e50302dfbfbf301ea431b79e2a0"
+    },
+    {
+      "path": "app/player/native/AudioBrand.cs",
+      "includedInRelease": true,
+      "sha256": "04f5dd177333e3fea5b5e6317a7959d72702481760869841b32bc22e56d4775b"
+    },
+    {
+      "path": "app/player/native/build.cjs",
+      "includedInRelease": true,
+      "sha256": "9c35e450519bccc9ae277784a3de236b396b5e9de461abbff286082064c75211"
+    },
+    {
+      "path": "app/player/native/DragProbe.cs",
+      "includedInRelease": false,
+      "sha256": "7bdb0c53c6e4297242952db52a7e27c1097e205a2f79fe5b7f11bcc56b08e2f6"
+    },
+    {
+      "path": "app/player/native/VideoHost.cs",
+      "includedInRelease": true,
+      "sha256": "273689901cd7f67988462d20fc45a0c8c3f92b562c8d9b72e4d9444d97939793"
+    },
+    {
+      "path": "app/player/package.json",
+      "includedInRelease": true,
+      "sha256": "0d45ecc53750422d3358acf8dd699e1c091dce8d9f3c364e1cefc4607bcf8372"
+    },
+    {
+      "path": "app/player/pnpm-lock.yaml",
+      "includedInRelease": true,
+      "sha256": "6ff762ed7bccd7100e34b9466cf529251a3910aeec04650e618521ecd66d925c"
+    },
+    {
+      "path": "app/player/preload.cjs",
+      "includedInRelease": true,
+      "sha256": "46de9f7a14fefefad4f70a6fe40dc5e2548c70dd5935176647771e750fe0755b"
+    },
+    {
+      "path": "app/player/queue-reorder.js",
+      "includedInRelease": true,
+      "sha256": "84b74b2ab444b47460eecd5504bfa2f6e8fec1635e3d9da2d4f6068b9e9ea10c"
+    },
+    {
+      "path": "app/player/README.md",
+      "includedInRelease": true,
+      "sha256": "883863c47eb9cb6ad33b0b5fdfd7e4f4371d6c65e9b05bce5f69b341dcc8a6d9"
+    },
+    {
+      "path": "app/player/src/attachments.ts",
+      "includedInRelease": true,
+      "sha256": "67422818cbc888a5b26588aeeab77696e4f526f82e7d59ca1a50c8bad96f3e78"
+    },
+    {
+      "path": "app/player/src/contracts.ts",
+      "includedInRelease": true,
+      "sha256": "8756df5bcfc56b4603f39288bebbfdea3691a29ded7f3d9c5d29a3fcc7afd801"
+    },
+    {
+      "path": "app/player/src/equalizer.ts",
+      "includedInRelease": true,
+      "sha256": "89d90d690c975c16cea0c2dc379199fa7674fec98c0a6cb2918297fed770f703"
+    },
+    {
+      "path": "app/player/src/legacy.ts",
+      "includedInRelease": true,
+      "sha256": "eec600caecbb88c9236a9d3c5024b90cfc2c81724cb2c1d3b76b03112ee2b93f"
+    },
+    {
+      "path": "app/player/src/lyrics.ts",
+      "includedInRelease": true,
+      "sha256": "4f09dc0bb8b4050e99e7b753e090987da6f8e5fa6dcfb5fd33aa18e3537b5110"
+    },
+    {
+      "path": "app/player/src/mpv-backend.ts",
+      "includedInRelease": true,
+      "sha256": "0d33de7f9ae8d60fa58f1717932dfb4a21717370eba7532ccdbb2a87a6773978"
+    },
+    {
+      "path": "app/player/src/mpv-client.ts",
+      "includedInRelease": true,
+      "sha256": "7e214e31ca46bd776c59755b5409c5708c30e4942237e19486fd2755789b7dfe"
+    },
+    {
+      "path": "app/player/src/service.ts",
+      "includedInRelease": true,
+      "sha256": "934d4d13ed5644cd4121d6bc4d2b40c3b433c66db30d0c78b0fffbea147568fc"
+    },
+    {
+      "path": "app/player/src/session.ts",
+      "includedInRelease": true,
+      "sha256": "d612c94bc1f6c1de71619fb6f55257363eb273a830ae8bdc5595ab06348c6588"
+    },
+    {
+      "path": "app/player/src/snap.ts",
+      "includedInRelease": true,
+      "sha256": "c7e7fec682a85b7bca046c9cecb9d6064353fa716e3bc224bbdba157d95cdd41"
+    },
+    {
+      "path": "app/player/src/surface.ts",
+      "includedInRelease": true,
+      "sha256": "051990fc8940daff28a4fe29e924be768ee48aa2a5d48f2b182914e67b7851bb"
+    },
+    {
+      "path": "app/player/src/visibility.ts",
+      "includedInRelease": true,
+      "sha256": "fa592d9245aa5eef329b6096626b25680c93a7344af917bb7d1db5fadd166e92"
+    },
+    {
+      "path": "app/player/src/window-controls.ts",
+      "includedInRelease": true,
+      "sha256": "8949001274298c2935702a28041fc3676d2f5ceb0283484b583617f3984ef46d"
+    },
+    {
+      "path": "app/player/start-isolated.cjs",
+      "includedInRelease": false,
+      "sha256": "556f7e8f7df1efc15cd86b9a0e80a283b9bb1963944fb15dd843da819c4702e0"
+    },
+    {
+      "path": "app/player/tests/attachments.test.cjs",
+      "includedInRelease": false,
+      "sha256": "feec329e66e2c6e2074cf0039591033dbbfeb2c9e597effa416e3c9009952797"
+    },
+    {
+      "path": "app/player/tests/check-snap-evidence.cjs",
+      "includedInRelease": false,
+      "sha256": "506b8fda04cd130c72ac4c87cac34a5e7dbb29c7973e6672fbbc4016ba4fabb3"
+    },
+    {
+      "path": "app/player/tests/core.test.cjs",
+      "includedInRelease": false,
+      "sha256": "7a108b4f4041ec2e6b008d45c5e223f00dc03970b8748db7b703bd16ee7b61e9"
+    },
+    {
+      "path": "app/player/tests/equalizer-tone.test.cjs",
+      "includedInRelease": false,
+      "sha256": "905dabf4db33e3f32d391b37caacf62437dbfa2edce54920fa73f686e58a3de6"
+    },
+    {
+      "path": "app/player/tests/features.test.cjs",
+      "includedInRelease": false,
+      "sha256": "df5e623a41b2e25dcb41ae9b908f48c40049c1ef28bbe47ce985d60829da61dc"
+    },
+    {
+      "path": "app/player/tests/finish.cjs",
+      "includedInRelease": false,
+      "sha256": "63d12b9c678cdc60eb0d0da661e20dc53bf1e0b726fc30ea735b9291dca57b2d"
+    },
+    {
+      "path": "app/player/tests/generate-formats.cjs",
+      "includedInRelease": false,
+      "sha256": "908cb0d7e7fb9e1151b8c69a247a934c275fe873be0dfadcf9b71c1abd71c8dc"
+    },
+    {
+      "path": "app/player/tests/integration.cjs",
+      "includedInRelease": false,
+      "sha256": "0035f52d91dcae3f3f9425dcd5d936100bcb01f3a35c300a62a035a5549e5f3a"
+    },
+    {
+      "path": "app/player/tests/legacy-regression.cjs",
+      "includedInRelease": false,
+      "sha256": "a7fed27a17991bb3ec2873cc09a3aca1240fb6bfe159e4316a90865e11689051"
+    },
+    {
+      "path": "app/player/tests/native-host.cjs",
+      "includedInRelease": false,
+      "sha256": "689fbdb43b5469bf74e0b9682fbd31a95c4b5ddb72939c82c575d458e1746f8b"
+    },
+    {
+      "path": "app/player/tests/native-mpv.cjs",
+      "includedInRelease": false,
+      "sha256": "20458d8a7c7e612bce380b3f671bdaf2267ecd617758b256f467d3586892f111"
+    },
+    {
+      "path": "app/player/tests/package-runtime.cjs",
+      "includedInRelease": false,
+      "sha256": "314091dd2d61282555c153a5b74ed870c857f4bae68b248a85ea69af6938e780"
+    },
+    {
+      "path": "app/player/tests/pipe.test.cjs",
+      "includedInRelease": false,
+      "sha256": "aada8e789cc696844345af69b5493ac6f19a36399862bc301f85cb67b54d7964"
+    },
+    {
+      "path": "app/player/tests/provenance.cjs",
+      "includedInRelease": false,
+      "sha256": "6ba6ccdc86808a98d0568b73f6dd7b3583e70f5d2f6b23df08304056e8cdd447"
+    },
+    {
+      "path": "app/player/tests/run-native.cjs",
+      "includedInRelease": false,
+      "sha256": "347cdf93d31ed566cad3935c257ae15d05b3ecf0f8e8426e4f08700e216256bb"
+    },
+    {
+      "path": "app/player/tests/video-control.cjs",
+      "includedInRelease": false,
+      "sha256": "c4483452fc9e945149ff45c3e15cb2594f47cd2c860ddf792608a2510c62ddb5"
+    },
+    {
+      "path": "app/player/tests/video-visible.cjs",
+      "includedInRelease": false,
+      "sha256": "303160ef6c7a59c354084d2e1ab6d48ced2af63f4172703eb7d8e619d8b3ef36"
+    },
+    {
+      "path": "app/player/tests/VideoInspect.cs",
+      "includedInRelease": false,
+      "sha256": "99527c5785b8ed2565cb33ee69b2dd64a6daade9e7b1a1b49d02ae8a6ccf4c84"
+    },
+    {
+      "path": "app/player/tests/visibility.test.cjs",
+      "includedInRelease": false,
+      "sha256": "8841eb9586585aba8a875203814863a838543b817ad105672ecdea03612f7848"
+    },
+    {
+      "path": "app/player/tests/window-controls.test.cjs",
+      "includedInRelease": false,
+      "sha256": "6954abbeec0b5e46e7b3df6b30389d525d6cda7e62e2c6a19a3764f4e7ef9cb0"
+    },
+    {
+      "path": "app/player/tsconfig.json",
+      "includedInRelease": true,
+      "sha256": "46c7cafd2bc48bfe1e61f94b4c4808b3022cb7a7090ec2a076ad7cc431bd6c8c"
+    },
+    {
+      "path": "app/player/vendor/materials/manifest.json",
+      "includedInRelease": true,
+      "sha256": "000ba2b79601f5683667c4f27a9aaadea4cb1d5eed01f770375361d100d3eac9"
+    },
+    {
+      "path": "app/player/vendor/materials/mpv-Copyright.txt",
+      "includedInRelease": true,
+      "sha256": "bfe9ee4cceabcb8ecbfadf208d04156f73d801e6a57369a5606bb8341e204a23"
+    },
+    {
+      "path": "app/player/vendor/materials/mpv-LICENSE.GPL.txt",
+      "includedInRelease": true,
+      "sha256": "edaef632cbb643e4e7a221717a6c441a4c1a7c918e6e4d56debc3d8739b233f6"
+    },
+    {
+      "path": "app/player/vendor/materials/mpv-LICENSE.LGPL.txt",
+      "includedInRelease": true,
+      "sha256": "72b672113d642cbb8ef5dcc76938db801983c56e50b1400ab930f1a64d6dc8d9"
+    },
+    {
+      "path": "app/player/vendor/source.json",
+      "includedInRelease": true,
+      "sha256": "fff7f1a42470f738ccdb85c35ef875c4f4f15e28caecb2bf3de3fc0942ae2e3d"
+    },
+    {
+      "path": "app/player/window.css",
+      "includedInRelease": true,
+      "sha256": "6e03ac20f06857e43d001b55b5fbe15981fcc120cc0f768476474188a89f6e84"
+    },
+    {
+      "path": "app/player/window.html",
+      "includedInRelease": true,
+      "sha256": "b39190e9c4b9ced1c4269e4d5dc728047124326a4835a8011499fd4830e99e29"
+    },
+    {
+      "path": "app/player/window.js",
+      "includedInRelease": true,
+      "sha256": "ea2c319a0abe10f4f73c808ef5ec9755f2fa533c03b3bde99c88ce7320bd2f54"
+    },
+    {
       "path": "app/preload.js",
       "includedInRelease": true,
-      "sha256": "5c74d9574e3f3cf2a8c341e57e8542172357e948f3f41ea07d5e987c64784f95"
+      "sha256": "4a9f0c061b66a0736cde01cf0779602ad023492c51b335a659d10d3b332cadfb"
     },
     {
       "path": "app/provider-status.js",
@@ -579,7 +939,7 @@
     {
       "path": "app/quick-disguise.js",
       "includedInRelease": true,
-      "sha256": "d81ab1174fbdf407b935106881ddeda3c82245f4d41b985c492ea2ed7da325cc"
+      "sha256": "fdf6500d364809ce18eaa3662c654ed7d3640cedf2c24178ee30692b0c806115"
     },
     {
       "path": "app/rating-model.js",
@@ -759,7 +1119,7 @@
     {
       "path": "app/renderer.js",
       "includedInRelease": true,
-      "sha256": "96f5c51ad3c9988102baf3d76f27cd95128fe0c753210abb4dd9303ed09e0128"
+      "sha256": "f27dc8757046a81d69498c964d34ea1091bc3a8044b86270803120694d2369f6"
     },
     {
       "path": "app/reorder-motion.js",
@@ -777,6 +1137,16 @@
       "sha256": "1cf8770700ec9ed2bd82056abcb4b9033122d8b8a37247a84f48311d5d681fcc"
     },
     {
+      "path": "app/save-backup-sync.js",
+      "includedInRelease": true,
+      "sha256": "2bf8d372129990c0f8d18f109509c828f87eea7423ee32e6829a6dbbc9e1fb4f"
+    },
+    {
+      "path": "app/save-snapshots.js",
+      "includedInRelease": true,
+      "sha256": "99a48f2943826d54c42250cfbe22977d3385e43c8181abf06f6da32362097f0e"
+    },
+    {
       "path": "app/scan-application-entries.js",
       "includedInRelease": true,
       "sha256": "7e41f6828baff474a54ce1dea3979bb18ebc8e85bfc6e06bf5e6edced6fde5ba"
@@ -789,7 +1159,7 @@
     {
       "path": "app/scan-classification.js",
       "includedInRelease": true,
-      "sha256": "cd9e1ee3880b18dac5229a8f482c265e89a7036f8dd010e7f5e71c73e868373e"
+      "sha256": "57db11c886c6635d3030a26e57f2761291b5438b8df78c30da05305e2098483c"
     },
     {
       "path": "app/scan-context.js",
@@ -859,7 +1229,7 @@
     {
       "path": "app/scan-pipeline.js",
       "includedInRelease": true,
-      "sha256": "c72175995a0d540b629b558602cb2945d1c326571b9693d056735cb4961b6808"
+      "sha256": "c559ee419770055e5a22b8685cca32e4adba073aa81683cd580591976f1c7547"
     },
     {
       "path": "app/scan-platform-layouts.json",
@@ -924,7 +1294,7 @@
     {
       "path": "app/secure-settings.js",
       "includedInRelease": true,
-      "sha256": "6d98a6c1e041795aa082d169e0cf853993dc96734e012e8a8d9deba2eb631053"
+      "sha256": "19898c5fe78f071eabbec591d143d9eb66030683c62f11a65f5220acbc770855"
     },
     {
       "path": "app/seedhub-metadata.js",
@@ -969,7 +1339,7 @@
     {
       "path": "app/styles.css",
       "includedInRelease": true,
-      "sha256": "a5e1db0329c7ae88bf5714ed520a5c7f5f19294cec0f03fadf4a7f98eed28e30"
+      "sha256": "d32f5d7a0878181956dac7b4a18fe319d5d4f27debcd4315645d4eb18789a545"
     },
     {
       "path": "app/theme-tooltips.css",
@@ -1019,432 +1389,12 @@
     {
       "path": "app/v19-layout.css",
       "includedInRelease": true,
-      "sha256": "cc97ecc9eedd752e764a84633e30e54149c7664f16241cc4ee69688fd0625a40"
+      "sha256": "d19ea8d718edaa623b095de5446eeda15d5283f848e0a3c4146d2d3258fa6981"
     },
     {
       "path": "app/v20-layout.css",
       "includedInRelease": true,
       "sha256": "a9cce2ecc432abb524c8557369116a5915e1b829f4ce1ce3d807e41fd54bad74"
-    },
-    {
-      "path": "app/webdav-address.js",
-      "includedInRelease": true,
-      "sha256": "4f04690a5b4ad2b28f6b77307ad59a6879eb3992156f1b917fbf8168f4739ba5"
-    },
-    {
-      "path": "app/webdav-client.js",
-      "includedInRelease": true,
-      "sha256": "8cbaa5ffd83f40b406784c1ff68f2b817a55eccb830a60b6d4974772f6a41ae1"
-    },
-    {
-      "path": "app/webdav-library-sync.js",
-      "includedInRelease": true,
-      "sha256": "63c1dd92d6e8cd3244139bf1486b503f78ce417c1ede3f72ed886fa5a4aa7d8f"
-    },
-    {
-      "path": "app/window-bounds.js",
-      "includedInRelease": true,
-      "sha256": "e39c32916ef66a9689b1d48c356a72071571af96d4b9de1d684e0dd272be8705"
-    },
-    {
-      "path": "app/workspace-dialog.js",
-      "includedInRelease": true,
-      "sha256": "edec2bc2059b2570f9b698678bd20c730385fcaa10e18af0eeb6ded211de05b7"
-    },
-    {
-      "path": "app/assets/icon.ico",
-      "includedInRelease": true,
-      "sha256": "262a71020d207874ae9f0b54756bf4fb6ec7a8ae5b51f2cd75e1aa350744f96b"
-    },
-    {
-      "path": "app/assets/icon.png",
-      "includedInRelease": true,
-      "sha256": "c4afc101bc951861ba1caeee84f9324d0bf28ff145ef964e9c810767b597c233"
-    },
-    {
-      "path": "app/assets/icon.svg",
-      "includedInRelease": true,
-      "sha256": "88034cff76af351784e7a90cdda6c2ab5792774af5bff8182448dde6585ddf83"
-    },
-    {
-      "path": "app/assets/taskbar-next.png",
-      "includedInRelease": true,
-      "sha256": "ada8af2737e8052ff511de42afd058f1e71fa8c80898415d82e12b57573c74ab"
-    },
-    {
-      "path": "app/assets/taskbar-pause.png",
-      "includedInRelease": true,
-      "sha256": "7100fe5ebd0cf8a177a3e753f0002d26a0eb993098b9de59f17ffa580a406d05"
-    },
-    {
-      "path": "app/assets/taskbar-play.png",
-      "includedInRelease": true,
-      "sha256": "eb0407d22da0d150a0618ca8fa2ef1f884c5f556cfd5b6a0da85e2243e75f725"
-    },
-    {
-      "path": "app/assets/taskbar-previous.png",
-      "includedInRelease": true,
-      "sha256": "be6e0543102b183c5649e4a28e80680146646afa421159b59cc3f9355ad949ea"
-    },
-    {
-      "path": "app/codec/build-info.txt",
-      "includedInRelease": true,
-      "sha256": "6bd925193ada5e870f4875ee62d61ea00a58630531e2c84002d0bf308f642ad7"
-    },
-    {
-      "path": "app/codec/LICENSE-GPLv3.txt",
-      "includedInRelease": true,
-      "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903"
-    },
-    {
-      "path": "app/codec/LICENSE-LGPLv2.1.txt",
-      "includedInRelease": true,
-      "sha256": "246041b6ecf9bc32d718a62c57877c78b5eb397b6467e74ed7ae2626ab189c30"
-    },
-    {
-      "path": "app/codec/LICENSE-LGPLv3.txt",
-      "includedInRelease": true,
-      "sha256": "da7eabb7bafdf7d3ae5e9f223aa5bdc1eece45ac569dc21b3b037520b4464768"
-    },
-    {
-      "path": "app/docs/player-feature-migration.md",
-      "includedInRelease": true,
-      "sha256": "6464a275c7bc92cf6c7a5503f9ba7e3e8c9630d6a3bca6b1cdba655aa26222fd"
-    },
-    {
-      "path": "app/docs/player-format-support.md",
-      "includedInRelease": true,
-      "sha256": "8c158d5c750290ca468ed5407f1912e6d368951935f45037ec31cda46e2064f4"
-    },
-    {
-      "path": "app/docs/player-third-party.md",
-      "includedInRelease": true,
-      "sha256": "545a6be716d38f46543496e803d65819c4ef588355387e6e6ba407bc318e2b16"
-    },
-    {
-      "path": "app/native/ResourcePicker.cs",
-      "includedInRelease": true,
-      "sha256": "9fef121d466eebb772b6bcd7e52f4e1bd334655924c42fa61c33ff4cc0b7a602"
-    },
-    {
-      "path": "app/player/audio-adapter.js",
-      "includedInRelease": true,
-      "sha256": "60999ae65870fb84df39e7a6306a98689924e8b1358fb5a933ca16f79e0803dc"
-    },
-    {
-      "path": "app/player/build-release.cjs",
-      "includedInRelease": false,
-      "sha256": "97b2cc4b59bb68cb5a74e3525590cedacbd3d0ab8b0ff7850b65798923be7bee"
-    },
-    {
-      "path": "app/player/dev-entry.cjs",
-      "includedInRelease": false,
-      "sha256": "b22e3c580ac08529751a97b371f910cf044b9e50302dfbfbf301ea431b79e2a0"
-    },
-    {
-      "path": "app/player/package.json",
-      "includedInRelease": true,
-      "sha256": "0d45ecc53750422d3358acf8dd699e1c091dce8d9f3c364e1cefc4607bcf8372"
-    },
-    {
-      "path": "app/player/pnpm-lock.yaml",
-      "includedInRelease": true,
-      "sha256": "6ff762ed7bccd7100e34b9466cf529251a3910aeec04650e618521ecd66d925c"
-    },
-    {
-      "path": "app/player/preload.cjs",
-      "includedInRelease": true,
-      "sha256": "46de9f7a14fefefad4f70a6fe40dc5e2548c70dd5935176647771e750fe0755b"
-    },
-    {
-      "path": "app/player/queue-reorder.js",
-      "includedInRelease": true,
-      "sha256": "84b74b2ab444b47460eecd5504bfa2f6e8fec1635e3d9da2d4f6068b9e9ea10c"
-    },
-    {
-      "path": "app/player/README.md",
-      "includedInRelease": true,
-      "sha256": "883863c47eb9cb6ad33b0b5fdfd7e4f4371d6c65e9b05bce5f69b341dcc8a6d9"
-    },
-    {
-      "path": "app/player/start-isolated.cjs",
-      "includedInRelease": false,
-      "sha256": "556f7e8f7df1efc15cd86b9a0e80a283b9bb1963944fb15dd843da819c4702e0"
-    },
-    {
-      "path": "app/player/tsconfig.json",
-      "includedInRelease": true,
-      "sha256": "46c7cafd2bc48bfe1e61f94b4c4808b3022cb7a7090ec2a076ad7cc431bd6c8c"
-    },
-    {
-      "path": "app/player/window.css",
-      "includedInRelease": true,
-      "sha256": "3ee4a6bc9f85c58e8018643f8616af55a6180496f9ef6b05641142feaa7cba42"
-    },
-    {
-      "path": "app/player/window.html",
-      "includedInRelease": true,
-      "sha256": "5ad9bdc115177cea823696dc3688917b75fe9c0c12a464718dedabfffcdff6a6"
-    },
-    {
-      "path": "app/player/window.js",
-      "includedInRelease": true,
-      "sha256": "36d5cdbaee45b993486baf97713fb6e84243865152bbd136e05019289257e47f"
-    },
-    {
-      "path": "app/player/native/AudioBrand.cs",
-      "includedInRelease": true,
-      "sha256": "04f5dd177333e3fea5b5e6317a7959d72702481760869841b32bc22e56d4775b"
-    },
-    {
-      "path": "app/player/native/build.cjs",
-      "includedInRelease": true,
-      "sha256": "9c35e450519bccc9ae277784a3de236b396b5e9de461abbff286082064c75211"
-    },
-    {
-      "path": "app/player/native/DragProbe.cs",
-      "includedInRelease": false,
-      "sha256": "7bdb0c53c6e4297242952db52a7e27c1097e205a2f79fe5b7f11bcc56b08e2f6"
-    },
-    {
-      "path": "app/player/native/VideoHost.cs",
-      "includedInRelease": true,
-      "sha256": "4f0cb14d8e515440518aa77be821dacbf0c5cf77a0552b2478dd32a2669cd9d4"
-    },
-    {
-      "path": "app/player/src/attachments.ts",
-      "includedInRelease": true,
-      "sha256": "67422818cbc888a5b26588aeeab77696e4f526f82e7d59ca1a50c8bad96f3e78"
-    },
-    {
-      "path": "app/player/src/contracts.ts",
-      "includedInRelease": true,
-      "sha256": "8756df5bcfc56b4603f39288bebbfdea3691a29ded7f3d9c5d29a3fcc7afd801"
-    },
-    {
-      "path": "app/player/src/equalizer.ts",
-      "includedInRelease": true,
-      "sha256": "89d90d690c975c16cea0c2dc379199fa7674fec98c0a6cb2918297fed770f703"
-    },
-    {
-      "path": "app/player/src/legacy.ts",
-      "includedInRelease": true,
-      "sha256": "eec600caecbb88c9236a9d3c5024b90cfc2c81724cb2c1d3b76b03112ee2b93f"
-    },
-    {
-      "path": "app/player/src/lyrics.ts",
-      "includedInRelease": true,
-      "sha256": "4f09dc0bb8b4050e99e7b753e090987da6f8e5fa6dcfb5fd33aa18e3537b5110"
-    },
-    {
-      "path": "app/player/src/mpv-backend.ts",
-      "includedInRelease": true,
-      "sha256": "c6c65fa4c313448d8def394f27350e753450dea2975554ebda8788d070dbda66"
-    },
-    {
-      "path": "app/player/src/mpv-client.ts",
-      "includedInRelease": true,
-      "sha256": "7e214e31ca46bd776c59755b5409c5708c30e4942237e19486fd2755789b7dfe"
-    },
-    {
-      "path": "app/player/src/service.ts",
-      "includedInRelease": true,
-      "sha256": "221e83958a0a8a342e8584fc0b3b0a80bd000487065168d9aca9a592d9020cdd"
-    },
-    {
-      "path": "app/player/src/session.ts",
-      "includedInRelease": true,
-      "sha256": "d612c94bc1f6c1de71619fb6f55257363eb273a830ae8bdc5595ab06348c6588"
-    },
-    {
-      "path": "app/player/src/snap.ts",
-      "includedInRelease": true,
-      "sha256": "c7e7fec682a85b7bca046c9cecb9d6064353fa716e3bc224bbdba157d95cdd41"
-    },
-    {
-      "path": "app/player/src/surface.ts",
-      "includedInRelease": true,
-      "sha256": "051990fc8940daff28a4fe29e924be768ee48aa2a5d48f2b182914e67b7851bb"
-    },
-    {
-      "path": "app/player/src/visibility.ts",
-      "includedInRelease": true,
-      "sha256": "929f6c0f07c34cd751393222dc6a761c0661f8848563fdb78efed496ed56f6d8"
-    },
-    {
-      "path": "app/player/src/window-controls.ts",
-      "includedInRelease": true,
-      "sha256": "8949001274298c2935702a28041fc3676d2f5ceb0283484b583617f3984ef46d"
-    },
-    {
-      "path": "app/player/tests/attachments.test.cjs",
-      "includedInRelease": false,
-      "sha256": "feec329e66e2c6e2074cf0039591033dbbfeb2c9e597effa416e3c9009952797"
-    },
-    {
-      "path": "app/player/tests/check-snap-evidence.cjs",
-      "includedInRelease": false,
-      "sha256": "506b8fda04cd130c72ac4c87cac34a5e7dbb29c7973e6672fbbc4016ba4fabb3"
-    },
-    {
-      "path": "app/player/tests/core.test.cjs",
-      "includedInRelease": false,
-      "sha256": "7a108b4f4041ec2e6b008d45c5e223f00dc03970b8748db7b703bd16ee7b61e9"
-    },
-    {
-      "path": "app/player/tests/equalizer-tone.test.cjs",
-      "includedInRelease": false,
-      "sha256": "905dabf4db33e3f32d391b37caacf62437dbfa2edce54920fa73f686e58a3de6"
-    },
-    {
-      "path": "app/player/tests/features.test.cjs",
-      "includedInRelease": false,
-      "sha256": "df5e623a41b2e25dcb41ae9b908f48c40049c1ef28bbe47ce985d60829da61dc"
-    },
-    {
-      "path": "app/player/tests/finish.cjs",
-      "includedInRelease": false,
-      "sha256": "63d12b9c678cdc60eb0d0da661e20dc53bf1e0b726fc30ea735b9291dca57b2d"
-    },
-    {
-      "path": "app/player/tests/generate-formats.cjs",
-      "includedInRelease": false,
-      "sha256": "908cb0d7e7fb9e1151b8c69a247a934c275fe873be0dfadcf9b71c1abd71c8dc"
-    },
-    {
-      "path": "app/player/tests/integration.cjs",
-      "includedInRelease": false,
-      "sha256": "0035f52d91dcae3f3f9425dcd5d936100bcb01f3a35c300a62a035a5549e5f3a"
-    },
-    {
-      "path": "app/player/tests/legacy-regression.cjs",
-      "includedInRelease": false,
-      "sha256": "a7fed27a17991bb3ec2873cc09a3aca1240fb6bfe159e4316a90865e11689051"
-    },
-    {
-      "path": "app/player/tests/native-host.cjs",
-      "includedInRelease": false,
-      "sha256": "689fbdb43b5469bf74e0b9682fbd31a95c4b5ddb72939c82c575d458e1746f8b"
-    },
-    {
-      "path": "app/player/tests/native-mpv.cjs",
-      "includedInRelease": false,
-      "sha256": "20458d8a7c7e612bce380b3f671bdaf2267ecd617758b256f467d3586892f111"
-    },
-    {
-      "path": "app/player/tests/package-runtime.cjs",
-      "includedInRelease": false,
-      "sha256": "314091dd2d61282555c153a5b74ed870c857f4bae68b248a85ea69af6938e780"
-    },
-    {
-      "path": "app/player/tests/pipe.test.cjs",
-      "includedInRelease": false,
-      "sha256": "aada8e789cc696844345af69b5493ac6f19a36399862bc301f85cb67b54d7964"
-    },
-    {
-      "path": "app/player/tests/provenance.cjs",
-      "includedInRelease": false,
-      "sha256": "6ba6ccdc86808a98d0568b73f6dd7b3583e70f5d2f6b23df08304056e8cdd447"
-    },
-    {
-      "path": "app/player/tests/run-native.cjs",
-      "includedInRelease": false,
-      "sha256": "347cdf93d31ed566cad3935c257ae15d05b3ecf0f8e8426e4f08700e216256bb"
-    },
-    {
-      "path": "app/player/tests/video-control.cjs",
-      "includedInRelease": false,
-      "sha256": "c4483452fc9e945149ff45c3e15cb2594f47cd2c860ddf792608a2510c62ddb5"
-    },
-    {
-      "path": "app/player/tests/video-visible.cjs",
-      "includedInRelease": false,
-      "sha256": "303160ef6c7a59c354084d2e1ab6d48ced2af63f4172703eb7d8e619d8b3ef36"
-    },
-    {
-      "path": "app/player/tests/VideoInspect.cs",
-      "includedInRelease": false,
-      "sha256": "99527c5785b8ed2565cb33ee69b2dd64a6daade9e7b1a1b49d02ae8a6ccf4c84"
-    },
-    {
-      "path": "app/player/tests/visibility.test.cjs",
-      "includedInRelease": false,
-      "sha256": "8841eb9586585aba8a875203814863a838543b817ad105672ecdea03612f7848"
-    },
-    {
-      "path": "app/player/tests/window-controls.test.cjs",
-      "includedInRelease": false,
-      "sha256": "6954abbeec0b5e46e7b3df6b30389d525d6cda7e62e2c6a19a3764f4e7ef9cb0"
-    },
-    {
-      "path": "app/player/vendor/source.json",
-      "includedInRelease": true,
-      "sha256": "fff7f1a42470f738ccdb85c35ef875c4f4f15e28caecb2bf3de3fc0942ae2e3d"
-    },
-    {
-      "path": "app/player/vendor/materials/manifest.json",
-      "includedInRelease": true,
-      "sha256": "000ba2b79601f5683667c4f27a9aaadea4cb1d5eed01f770375361d100d3eac9"
-    },
-    {
-      "path": "app/player/vendor/materials/mpv-Copyright.txt",
-      "includedInRelease": true,
-      "sha256": "bfe9ee4cceabcb8ecbfadf208d04156f73d801e6a57369a5606bb8341e204a23"
-    },
-    {
-      "path": "app/player/vendor/materials/mpv-LICENSE.GPL.txt",
-      "includedInRelease": true,
-      "sha256": "edaef632cbb643e4e7a221717a6c441a4c1a7c918e6e4d56debc3d8739b233f6"
-    },
-    {
-      "path": "app/player/vendor/materials/mpv-LICENSE.LGPL.txt",
-      "includedInRelease": true,
-      "sha256": "72b672113d642cbb8ef5dcc76938db801983c56e50b1400ab930f1a64d6dc8d9"
-    },
-    {
-      "path": "app/vendor/dash.all.min.js",
-      "includedInRelease": true,
-      "sha256": "f7cff5c204b364b188505d0b3e5701d62a1732225ec24a310e137ddf895966af"
-    },
-    {
-      "path": "app/vendor/epub.min.js",
-      "includedInRelease": true,
-      "sha256": "06eae15745107b4aa508c95538275251f69bfb9f1175621fc458d9f42ed082d4"
-    },
-    {
-      "path": "app/vendor/hls.min.js",
-      "includedInRelease": true,
-      "sha256": "7c47cd97d7a6e7b98d9623dd8ed9a6d45af4be4085e0c2001cd7175c2b4cfb07"
-    },
-    {
-      "path": "app/vendor/jszip.min.js",
-      "includedInRelease": true,
-      "sha256": "acc7e41455a80765b5fd9c7ee1b8078a6d160bbbca455aeae854de65c947d59e"
-    },
-    {
-      "path": "app/vendor/manifest.json",
-      "includedInRelease": true,
-      "sha256": "d5431a760fead01911dfbf037ae222bf17213a7d4f0fa915df3707ed99ca9025"
-    },
-    {
-      "path": "app/vendor/mobi-parser.min.mjs",
-      "includedInRelease": true,
-      "sha256": "da8b80a36435dc2dbbea886f9c24199c60f3a6f19de47886a64a34347320aac0"
-    },
-    {
-      "path": "app/vendor/pdf.min.mjs",
-      "includedInRelease": true,
-      "sha256": "27fc2a057a00f92a4334ad06e17dbd7259912954e9fb7f76400bcca5fd190a9c"
-    },
-    {
-      "path": "app/vendor/pdf.worker.min.mjs",
-      "includedInRelease": true,
-      "sha256": "1baa1844c89c80a5b2797c916e75ab29254be46d8e9cb53cb6364d7aad84be36"
-    },
-    {
-      "path": "app/vendor/purify.min.js",
-      "includedInRelease": true,
-      "sha256": "f263b05369e050fa175d4ecb9c9358eb4253602d510297adfb31df48b2f1c4d5"
     },
     {
       "path": "app/vendor/cmaps/78-EUC-H.bcmap",
@@ -2292,6 +2242,26 @@
       "sha256": "543923bead225732aba30976690ee89095a19628277b5863efecc2c728d5d7bf"
     },
     {
+      "path": "app/vendor/dash.all.min.js",
+      "includedInRelease": true,
+      "sha256": "f7cff5c204b364b188505d0b3e5701d62a1732225ec24a310e137ddf895966af"
+    },
+    {
+      "path": "app/vendor/epub.min.js",
+      "includedInRelease": true,
+      "sha256": "06eae15745107b4aa508c95538275251f69bfb9f1175621fc458d9f42ed082d4"
+    },
+    {
+      "path": "app/vendor/hls.min.js",
+      "includedInRelease": true,
+      "sha256": "7c47cd97d7a6e7b98d9623dd8ed9a6d45af4be4085e0c2001cd7175c2b4cfb07"
+    },
+    {
+      "path": "app/vendor/jszip.min.js",
+      "includedInRelease": true,
+      "sha256": "acc7e41455a80765b5fd9c7ee1b8078a6d160bbbca455aeae854de65c947d59e"
+    },
+    {
       "path": "app/vendor/licenses/@lingo-reader/mobi-parser/LICENSE",
       "includedInRelease": true,
       "sha256": "995c6c256b13ced9b14de5bbc2b03d1d1648576c84cd2e96f995d7094c83d08e"
@@ -2340,6 +2310,31 @@
       "path": "app/vendor/licenses/pdfjs-dist/LICENSE",
       "includedInRelease": true,
       "sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594"
+    },
+    {
+      "path": "app/vendor/manifest.json",
+      "includedInRelease": true,
+      "sha256": "d5431a760fead01911dfbf037ae222bf17213a7d4f0fa915df3707ed99ca9025"
+    },
+    {
+      "path": "app/vendor/mobi-parser.min.mjs",
+      "includedInRelease": true,
+      "sha256": "da8b80a36435dc2dbbea886f9c24199c60f3a6f19de47886a64a34347320aac0"
+    },
+    {
+      "path": "app/vendor/pdf.min.mjs",
+      "includedInRelease": true,
+      "sha256": "27fc2a057a00f92a4334ad06e17dbd7259912954e9fb7f76400bcca5fd190a9c"
+    },
+    {
+      "path": "app/vendor/pdf.worker.min.mjs",
+      "includedInRelease": true,
+      "sha256": "1baa1844c89c80a5b2797c916e75ab29254be46d8e9cb53cb6364d7aad84be36"
+    },
+    {
+      "path": "app/vendor/purify.min.js",
+      "includedInRelease": true,
+      "sha256": "f263b05369e050fa175d4ecb9c9358eb4253602d510297adfb31df48b2f1c4d5"
     },
     {
       "path": "app/vendor/standard_fonts/FoxitDingbats.pfb",
@@ -2422,14 +2417,84 @@
       "sha256": "93fed46019c38bbe566b479d22148e2e8a1e85ada614accb0211c37b2c61c19b"
     },
     {
-      "includedInRelease": false,
-      "path": ".gitignore",
-      "sha256": "f02380938fda5db5a1176f2b400d19fc799d4b20c07ac1baf4a0c1383fca7515"
+      "path": "app/webdav-address.js",
+      "includedInRelease": true,
+      "sha256": "4f04690a5b4ad2b28f6b77307ad59a6879eb3992156f1b917fbf8168f4739ba5"
     },
     {
-      "includedInRelease": false,
-      "path": "README.md",
-      "sha256": "53ca413328d7bca19cd3d7e0bfbf396ff0eb87f65f79613809805ac711c8c113"
+      "path": "app/webdav-client.js",
+      "includedInRelease": true,
+      "sha256": "d1e0c5a239903cd89ef7a54e88615cf44d11ce997325dbdbafe4507342667f79"
+    },
+    {
+      "path": "app/webdav-condition-probe.js",
+      "includedInRelease": true,
+      "sha256": "597d31797ac09ee7ad5838d68568af530a2919d7dffb53eb2843f638a6fa5599"
+    },
+    {
+      "path": "app/webdav-cover-sync.js",
+      "includedInRelease": true,
+      "sha256": "ddfa62afffc514330f856fd7f30aeb596de1e5c9757cf8f3dc6eefb11a9759c8"
+    },
+    {
+      "path": "app/webdav-diagnostic-log.js",
+      "includedInRelease": true,
+      "sha256": "a07cda788b3b3be5499cc3ed0b189e473ba4be113b5a78f3dfa128071f6dbcdf"
+    },
+    {
+      "path": "app/webdav-endpoint-key.js",
+      "includedInRelease": true,
+      "sha256": "06ac012adcdeedbd46d4d62c7b2d689b7e0d68212e8d005bac8164331d877e7c"
+    },
+    {
+      "path": "app/webdav-library-sync.js",
+      "includedInRelease": true,
+      "sha256": "e0975beef242fee2c6271e06bf9b80e349001c410c41f869f84dcbb832a87a0f"
+    },
+    {
+      "path": "app/webdav-save-catalog-write.js",
+      "includedInRelease": true,
+      "sha256": "a56f8b94e93534a7d09d6a53fd9d88baa6bbafae237c2ed9e6a369972582c0c7"
+    },
+    {
+      "path": "app/webdav-save-catalog.js",
+      "includedInRelease": true,
+      "sha256": "441e91eb1a50900f5e9e428e7a9075d91b6dcb9e1c9b0bd13df9c11d1af41088"
+    },
+    {
+      "path": "app/webdav-save-delete.js",
+      "includedInRelease": true,
+      "sha256": "be1bcfccf8172b4dba3aac887cc64a06d975701c7037bf390816070982455e40"
+    },
+    {
+      "path": "app/webdav-save-transfer.js",
+      "includedInRelease": true,
+      "sha256": "4616061ac708e7830fdb02505d9542186762f4628339752dafba71101e3320a4"
+    },
+    {
+      "path": "app/webdav-state.js",
+      "includedInRelease": true,
+      "sha256": "720ae47f7ac6a58136f6ab7f07e293000c4a0e976f4696666b6020983627e806"
+    },
+    {
+      "path": "app/webdav-sync-choice-session.js",
+      "includedInRelease": true,
+      "sha256": "541e1c17a46a45653fc4e9791886dffcdd3ccd20234abe9abde759c1a90017da"
+    },
+    {
+      "path": "app/webdav-write-recovery.js",
+      "includedInRelease": true,
+      "sha256": "17dea32a4a5f56ca12d6afc77c7dab578f8b9c32ef94b90df78b3ac63de01a64"
+    },
+    {
+      "path": "app/window-bounds.js",
+      "includedInRelease": true,
+      "sha256": "e39c32916ef66a9689b1d48c356a72071571af96d4b9de1d684e0dd272be8705"
+    },
+    {
+      "path": "app/workspace-dialog.js",
+      "includedInRelease": true,
+      "sha256": "edec2bc2059b2570f9b698678bd20c730385fcaa10e18af0eeb6ded211de05b7"
     },
     {
       "includedInRelease": false,
@@ -2439,7 +2504,12 @@
     {
       "includedInRelease": false,
       "path": "packaging/Launcher.cs",
-      "sha256": "056e4f7130d37bb4bcb898c15b0ac0a3bcc10b9c0ded4b1ec3b88db924b39501"
+      "sha256": "072de14c7a1e34b13b6d0341190495db1336416343b2039682573a83478d619f"
+    },
+    {
+      "includedInRelease": false,
+      "path": "README.md",
+      "sha256": "bf71e8868d69dca6c5e073b1abf6327681fa95cfa8e8b9ca96fe4b80437087fa"
     },
     {
       "includedInRelease": false,
@@ -2994,7 +3064,7 @@
     {
       "includedInRelease": false,
       "path": "tests/player-design.cjs",
-      "sha256": "204ef92dd03ce8a9a0eb2a3916d4753ae336500dd08e949332b5fdb6579b2862"
+      "sha256": "2b9d2ea51fde930e0cdb46d35bcecc35b833fe89ddcfa09fbed16e2e2be92a97"
     },
     {
       "includedInRelease": false,
@@ -3004,7 +3074,7 @@
     {
       "includedInRelease": false,
       "path": "tests/player-library.cjs",
-      "sha256": "822ca8c41ca64a0ba83c5d27eadbbe7edf26bacbf05c9c177b1b4700736eee81"
+      "sha256": "353e6d4529514ee80ae95e6d51b9085113d72ac960f66ed16213518f7a791c0f"
     },
     {
       "includedInRelease": false,
@@ -3024,7 +3094,7 @@
     {
       "includedInRelease": false,
       "path": "tests/portable-relations.cjs",
-      "sha256": "19b948795156c642b1ba214b9c8d4500ca5559d415b5fc349724b746a5d6377e"
+      "sha256": "e526a1c8caa93273d47d9a13754be634480c91b6ac98551b172f26d4a1008d36"
     },
     {
       "includedInRelease": false,
@@ -3044,7 +3114,7 @@
     {
       "includedInRelease": false,
       "path": "tests/quick-disguise.cjs",
-      "sha256": "6d2931caf6414ee65858d6a77d7a2941e0f6420bced2984c322cd2f879fb49d4"
+      "sha256": "984217448cb67ae165f9c3c0a2c28e27038b4d67e10ae6f570d489949719762a"
     },
     {
       "includedInRelease": false,
@@ -3219,12 +3289,12 @@
     {
       "includedInRelease": false,
       "path": "tests/webdav-client.cjs",
-      "sha256": "e82fb741573d86db1b080570d46cf79a125659227417a3be5367093c6863aa25"
+      "sha256": "8d5025c0760b5931e4c1c42c13886f90730877dbcdcd5721ad269b4ddadef904"
     },
     {
       "includedInRelease": false,
       "path": "tests/webdav-fixture.cjs",
-      "sha256": "16d31276dc12d6be7d9e2a01e1cc5f8c379988a60012b00851ba2dd0376920f6"
+      "sha256": "9b4e630906a735eaedb187d41506ae7ba51676a3cb45f7b2246673ac54f76fe8"
     },
     {
       "includedInRelease": false,
@@ -3310,11 +3380,6 @@
       "includedInRelease": false,
       "path": "tests/yueden-test-smoke.cjs",
       "sha256": "9cd8120fdf9de5b5ff63f70adefa17b046b8e9132f8b34f5fd36b6690cd2637a"
-    },
-    {
-      "sha256": "8b9c3028d6467ff3be7c793141927841d70f47f52d0590677438f488ca154992",
-      "path": ".gitattributes",
-      "includedInRelease": false
     }
   ],
   "version": "1.0.1",

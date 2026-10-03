@@ -52,6 +52,11 @@ async function scan(roots,filter='all',options={}){
   if(project){try{const p=JSON.parse((await ctx.read(path.join(dir,project.name),32768)).toString('utf8'));if(['scene','video','web'].includes(p.type)&&p.file&&(p.preview||p.workshopid||p.general)){ignored.wallpaperDirectories++;record(dir,'wallpaper-project','项目清单声明为壁纸，内部素材归属壁纸项目');return;}}catch(error){if(error.code==='SCAN_BUDGET')throw error;}}
   for(const row of rows)if(row.kind==='link')record(path.join(dir,row.name),'symbolic-link','跳过符号链接 / 联接，避免循环与越出扫描范围');
   softwareScopes.push(...await require('./scan-platform-ownership').scopes(dir,rows,{summary,product}));
+  if(path.basename(path.dirname(dir)).toLowerCase()==='common'&&path.basename(path.dirname(path.dirname(dir))).toLowerCase()==='steamapps'){
+   const installed=await require('./scan-steam-installation').installed(dir,rows,ctx,summary);
+   const exes=rows.filter(r=>r.kind==='file'&&/\.exe$/i.test(r.name));
+   if(!exes.length){const entry=await make(dir,'steam-folder',{title:installed?.title||path.basename(dir),identifiers:installed?.identifiers||{}},{kind:'resource_package',root:dir,confidence:1,ownedPaths:[dir]},[{rule:'steam-common-folder',source:dir,detail:'Steam common 下的直接资源目录；没有直接 EXE 时保留目录入口'}],[]);entry.name=installed?.title||path.basename(dir);entry.scanInfo.automatic.name=entry.name;entry.localPath=dir;entry.reviewRequired=false;return;}
+  }
   const direct=rows.filter(r=>r.kind==='file'&&/\.exe$/i.test(r.name)),programs=[];
   for(const r of direct){const file=path.join(dir,r.name);programs.push({file,metadata:await product(file)});}
   // Binary siblings and launcher references are read only, shared by all scan modes.

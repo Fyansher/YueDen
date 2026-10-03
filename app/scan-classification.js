@@ -4,7 +4,8 @@ function classify({kind,file='',metadata={},evidence=[],rules=[]}){
  const conflict=rules.length>1&&new Set(rules.map(r=>r.type).filter(Boolean)).size>1;
  const hit=rules[0];if(hit?.type&&!conflict)return {type:hit.type,confidence:1,candidates:[{type:hit.type,score:1}],reason:'已核对且符合路径 / 产品条件的规则',conflicts:[]};
  let type='unknown_file',confidence=.3,candidates=[],reason='证据不足，保留未知状态';
- if(kind==='application'){
+ if(kind==='steam-folder'){type='game';confidence=1;reason='Steam common 下的直接资源目录';}
+ else if(kind==='application'){
   if(!metadata.validPe){type='unknown_file';confidence=.2;reason='文件名带 EXE 扩展名，但未验证为有效 PE 程序；不凭扩展名确认应用';candidates=[{type:'unknown_application',score:.2}];}
   else if(require('./scan-software-evidence').purpose(metadata,file)){type='software';confidence=.9;reason=require('./scan-software-evidence').purpose(metadata,file);}
   else if(evidence.some(e=>e.rule==='installed-product-category')){type=evidence.find(e=>e.rule==='installed-product-category').type;confidence=.98;reason='有效程序、安装位置及平台产品类别相互验证';}

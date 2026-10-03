@@ -41,6 +41,7 @@ export class MpvBackend implements Backend {
         '--wid=' + this.childHandle, '--input-ipc-server=' + pipe
       ], { shell: false, windowsHide: true, stdio: 'ignore' });
       this.process = child;
+      this.brandAudio?.(child.pid!);
       child.on('error', error => { this.playbackError = error.message; this.client?.close(); });
       child.on('exit', () => { if (this.process !== child) return; this.playbackError = '播放后端进程已退出'; this.client?.close(); this.client = null; this.process = null; if (MpvBackend.owner === this) MpvBackend.owner = null; });
       this.client = await MpvClient.connect(pipe);

@@ -3,7 +3,9 @@ const librarySelection={active:false,ids:new Set(),view:null,mutation:false,refr
 const DELETE_ICON='<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v5m4-5v5"/></svg>';
 function visibleSelectionIds(){const visible=new Set(filterItems().map(i=>i.id));return [...librarySelection.ids].filter(id=>visible.has(id)&&state.items.some(i=>i.id===id));}
 function setSelectionMode(enabled){
- librarySelection.active=Boolean(enabled)&&!document.body.classList.contains('is-disguised');librarySelection.ids.clear();librarySelection.view=activeView;renderLibrarySelection();
+ librarySelection.active=Boolean(enabled)&&!document.body.classList.contains('is-disguised');librarySelection.ids.clear();librarySelection.view=activeView;
+ if(!librarySelection.active){snapshotSelection.clear();snapshotAnchor=null;snapshotPaint=null;}
+ if(typeof snapshotCardMode==='function'&&snapshotCardMode())renderLibrary();else renderLibrarySelection();
 }
 function toggleLibrarySelection(id,event={}){
  if(!librarySelection.active)return;
@@ -37,11 +39,15 @@ function installSelectionPainting(){
 function renderLibrarySelection(){
  if(!document.querySelector('#batchActions'))return;
  if(activeView==='audio'&&['songs','playlists'].includes(window.audioBrowser?.view)){for(const id of ['batchActions','batchSummary'])$(id).classList.add('hidden');return;}
+ const inSnapshotSelection=typeof snapshotSelectionMode==='function'&&snapshotSelectionMode();
  if(librarySelection.view!==activeView||document.body.classList.contains('is-disguised')){librarySelection.ids.clear();librarySelection.view=activeView;if(document.body.classList.contains('is-disguised'))librarySelection.active=false;}
  const visible=new Set(filterItems().map(i=>i.id));librarySelection.ids=new Set([...librarySelection.ids].filter(id=>visible.has(id)));
- const active=librarySelection.active,dragging=Boolean(document.querySelector('.resource-card.dragging')),ids=visibleSelectionIds(),host=$('libraryGrid');host.classList.toggle('selection-mode',active);$('batchActions').classList.toggle('hidden',!active&&!dragging);$('batchSummary').classList.toggle('hidden',!active&&!dragging);$('batchSummary').classList.toggle('drag-only',!active&&dragging);
- $('batchCount').textContent='已选 '+ids.length+' / '+visible.size;$('batchSelectAll').textContent=ids.length&&ids.length===visible.size?'取消全选':'全选';
- $('batchDelete').setAttribute('aria-disabled',String(!ids.length||librarySelection.mutation));$('batchDelete').title=ids.length?'删除选中的 '+ids.length+' 个条目；也可拖入卡片':'拖入卡片删除';
+ const active=librarySelection.active,dragging=Boolean(document.querySelector('.resource-card.dragging')),ids=visibleSelectionIds(),host=$('libraryGrid'),showTools=active||dragging;
+ host.classList.toggle('selection-mode',active);$('batchActions').classList.toggle('hidden',!showTools);$('batchSummary').classList.toggle('hidden',!showTools);$('batchSummary').classList.toggle('drag-only',!active&&dragging);
+ const selectedSnapshots=inSnapshotSelection?snapshotSelection.size:0,allSnapshotRows=inSnapshotSelection?visibleSnapshotRows().length:0,allSelected=inSnapshotSelection?visible.size>0&&ids.length===visible.size&&selectedSnapshots===allSnapshotRows:ids.length>0&&ids.length===visible.size;
+ $('batchCount').textContent=inSnapshotSelection?'已选 '+ids.length+' 个资源 · '+selectedSnapshots+' 份存档':'已选 '+ids.length+' / '+visible.size;$('batchSelectAll').textContent=allSelected?'取消全选':'全选';
+ $('batchDelete').disabled=inSnapshotSelection?(!ids.length&&!selectedSnapshots||librarySelection.mutation):(!ids.length||librarySelection.mutation);
+ $('batchDelete').setAttribute('aria-disabled',String(inSnapshotSelection?(!ids.length&&!selectedSnapshots||librarySelection.mutation):(!ids.length||librarySelection.mutation)));$('batchDelete').title=inSnapshotSelection?'删除所选资源或存档':'删除选中的 '+ids.length+' 个条目；也可拖入卡片';
  $('batchMove').disabled=!ids.length||librarySelection.mutation;$('batchRefresh').disabled=!ids.length||Boolean(librarySelection.refreshJob);$('batchSelectAll').disabled=!visible.size;
  $('filterToggle').setAttribute('aria-expanded',String(!$('filters').classList.contains('hidden')));
  for(const card of host.querySelectorAll('.resource-card')){
@@ -49,6 +55,7 @@ function renderLibrarySelection(){
   if(!label){label=document.createElement('label');label.className='card-select';label.innerHTML='<input type="checkbox"><span aria-hidden="true"></span>';label.draggable=false;label.addEventListener('click',e=>e.stopPropagation());label.querySelector('input').addEventListener('change',()=>toggleLibrarySelection(card.dataset.id));card.prepend(label);}
   const selected=librarySelection.ids.has(card.dataset.id),input=label.querySelector('input');input.checked=selected;input.setAttribute('aria-label','选择 '+(state.items.find(i=>i.id===card.dataset.id)?.name||'条目'));card.classList.toggle('is-selected',selected);card.setAttribute('aria-selected',String(selected));
  }
+ renderSnapshotSelectionUi();
 }
 function selectionDragIds(card){return librarySelection.active&&librarySelection.ids.has(card.dataset.id)?filterItems().filter(i=>librarySelection.ids.has(i.id)).map(i=>i.id):[card.dataset.id];}
 async function deleteLibrarySelection(ids=visibleSelectionIds()){
@@ -56,9 +63,8 @@ async function deleteLibrarySelection(ids=visibleSelectionIds()){
  const wanted=new Set(ids),items=state.items.filter(i=>wanted.has(i.id));if(!items.length)return;
  librarySelection.mutation=true;renderLibrarySelection();
  try{
-  const names=items.slice(0,4).map(i=>'“'+i.name+'”').join('、');
-  if(!await confirmDeletion('确定删除 '+items.length+' 个资源条目？\n'+names+(items.length>4?' 等':'')+'\n仅移除资源库记录，不删除本地文件、笔记或存档快照。'))return;
-  const next={...state,items:state.items.filter(i=>!wanted.has(i.id))};state=await native.saveLibrary(next);items.forEach(i=>librarySelection.ids.delete(i.id));render();showToast('已删除 '+items.length+' 个资源条目');
+  if(!(await deleteResourceRecords(items.map(i=>i.id))))return;
+  items.forEach(i=>librarySelection.ids.delete(i.id));render();
  }catch(error){showToast('删除失败：'+error.message,'error');}finally{librarySelection.mutation=false;renderLibrary();}
 }
 async function moveLibrarySelection(){
@@ -89,9 +95,16 @@ function installLibrarySelection(){
  summary.prepend(actions);$('filterToggle').before(summary);installSelectionPainting();
  const progress=document.createElement('div');progress.id='batchProgress';progress.className='batch-progress hidden';progress.innerHTML='<span id="batchProgressText" role="status"></span><button type="button" id="batchStop">停止刷新</button>';$('libraryGrid').before(progress);
  $('filterToggle').addEventListener('click',()=>setSelectionMode(!$('filters').classList.contains('hidden')));
- $('batchSelectAll').onclick=()=>{const allIds=filterItems().map(i=>i.id);librarySelection.ids=new Set(visibleSelectionIds().length===allIds.length?[]:allIds);renderLibrarySelection();};
- $('batchDelete').onclick=()=>deleteLibrarySelection();$('batchRefresh').onclick=()=>refreshLibrarySelection();$('batchMove').onclick=moveLibrarySelection;
+ $('batchSelectAll').onclick=()=>{
+  if(typeof snapshotSelectionMode==='function'&&snapshotSelectionMode()){
+   const itemIds=filterItems().map(i=>i.id),saveIds=visibleSnapshotRows().map(row=>row.id),allResources=itemIds.length>0&&itemIds.every(id=>librarySelection.ids.has(id)),allSaves=saveIds.every(id=>snapshotSelection.has(id)),clear=allResources&&allSaves;
+   librarySelection.view=activeView;librarySelection.active=true;librarySelection.ids=new Set(clear?[]:itemIds);snapshotSelection=new Set(clear?[]:saveIds);snapshotAnchor=null;renderLibrarySelection();return;
+  }
+  const allIds=filterItems().map(i=>i.id);librarySelection.ids=new Set(visibleSelectionIds().length===allIds.length?[]:allIds);renderLibrarySelection();
+ };
+ $('batchDelete').onclick=()=>typeof snapshotSelectionMode==='function'&&snapshotSelectionMode()?deleteSnapshotResourceSelection():deleteLibrarySelection();$('batchRefresh').onclick=()=>refreshLibrarySelection();$('batchMove').onclick=moveLibrarySelection;
  $('batchStop').onclick=()=>{if(librarySelection.refreshJob){const job=librarySelection.refreshJob;job.cancelled=true;job.status='cancelled';native.cancelMetadataRefresh(job.jobId);window.audioPanels?.cancelLookup();librarySelection.refreshJob=null;$('batchProgress').classList.add('hidden');renderLibrarySelection();}};
  const bin=$('batchDelete');bin.addEventListener('dragover',event=>{if(!document.querySelector('.resource-card.dragging'))return;event.preventDefault();event.dataTransfer.dropEffect='move';bin.classList.add('drag-delete-over');});bin.addEventListener('dragleave',event=>{if(!bin.contains(event.relatedTarget))bin.classList.remove('drag-delete-over');});document.addEventListener('dragend',()=>bin.classList.remove('drag-delete-over'));
  document.addEventListener('keydown',event=>{if(event.key==='Escape'&&librarySelection.active&&$('editorBackdrop').classList.contains('hidden')&&!document.querySelector('.app-dialog-backdrop'))setSelectionMode(false);});
+ installSnapshotPainting();
 }

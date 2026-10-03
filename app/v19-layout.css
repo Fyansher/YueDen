@@ -19,5 +19,8 @@
 .library-grid.portrait-layout:not(.list-layout):not(.small-layout) .resource-card { grid-template-rows:auto 136px; }
 .library-grid.portrait-layout:not(.list-layout):not(.small-layout) .card-foot .card-year { margin-left:auto; }
 .library-grid.list-layout .compact-row { position:relative; }
+.library-grid.list-layout .compact-row:has(>.resource-card-content) { display:block; }
+.library-grid.list-layout .compact-row>.resource-card-content { position:relative; display:grid; grid-template-columns:96px minmax(0,1fr) 152px 48px; gap:14px; align-items:center; min-height:94px; }
 .library-grid.list-layout .compact-row .card-year { position:absolute; right:14px; bottom:12px; }
 .library-grid.list-layout .compact-row .card-actions { position:absolute; right:14px; bottom:35px; }
+@media(max-width:780px) { .library-grid.list-layout .compact-row>.resource-card-content { grid-template-columns:76px minmax(0,1fr) 48px; gap:10px; } }

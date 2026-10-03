@@ -85,22 +85,22 @@ function createSourceSearch({json,text,settings=()=>({}),pace=350}) {
     const key=Symbol(type+query);
     const task=(async()=>{
       const publication=['book','manga'].includes(type),specs=[];
-      const add=(id,label,run)=>specs.push({id,label,run});
+      const add=(id,label,run,searchUrl)=>specs.push({id,label,run,searchUrl});
       if(publication){add('douban','豆瓣读书',({raw},q)=>raw.doubanSearch(q));add('bangumi','Bangumi',({raw},q)=>raw.bangumiPublication(q,type));add('openlibrary','Open Library',({raw},q)=>raw.openLibrarySearch(q));add('googlebooks','Google Books',googleBooks);}
-      if(type==='book'){add('tstrs','SaltyLeo 的书架',(io,q)=>require('./book-catalog-sources').search(io,q,'tstrs'));add('onelib','1lib 公开书目',(io,q)=>require('./book-catalog-sources').search(io,q,'onelib'));}
+      if(type==='book'){add('tstrs','SaltyLeo 的书架',(io,q)=>require('./book-catalog-sources').search(io,q,'tstrs'));add('onelib','1lib 公开书目',(io,q)=>require('./book-catalog-sources').search(io,q,'onelib'),q=>'https://1lib.sk/s/'+encodeURIComponent(q));}
       if(type==='anime'){add('bangumi','Bangumi',({raw},q)=>raw.bangumiSearch(q,type));add('douban','豆瓣电影',(io,q)=>doubanMovie(io,q,type));}
       if(type==='anime'||type==='manga'){add('myanimelist','MyAnimeList',(io,q)=>mal(io,q,type));add('anilist','AniList',(io,q)=>anilist(io,q,type));}
       if(type==='movie'){add('douban','豆瓣电影',doubanMovie);add('bangumi','Bangumi（动画电影）',async({raw},q)=>(await raw.bangumiSearch(q,'anime')).filter(entry=>entry.episodes===1).map(entry=>({...entry,scope:'film'})));add('tvmaze','TVmaze',tvmaze);add('itunes','Apple iTunes',itunes);}
       if(type==='anime'||type==='manga')add('kitsu','Kitsu',(io,q)=>require('./public-media-sources').kitsu(io,q,type));
       if(type==='movie'||type==='anime')add('seedhub','SeedHub',(io,q)=>require('./seedhub-metadata').search(io,q,type));
       if(type==='movie')add('wikidata','Wikidata',require('./public-media-sources').wikidata);
-      const sources=specs.map(spec=>({id:spec.id,label:spec.label,items:[],state:'loading',message:'正在获取…'}));
+      const sources=specs.map(spec=>({id:spec.id,label:spec.label,items:[],state:'loading',message:'正在获取…',...(spec.searchUrl?{searchUrl:spec.searchUrl(query)}:{})}));
       // Never briefly publish a novel as a manga while waiting for type proof.
       const visibleSources=()=>sources.map(source=>source.id==='douban'&&type==='manga'?{...source,items:source.items.filter(entry=>/漫画|マンガ|comic|manga/i.test([entry.name,...arr(entry.genres)].join(' '))||sources.find(s=>s.id==='bangumi')?.items.some(other=>norm(other.developer)&&norm(other.developer)===norm(entry.developer)&&norm(other.name)===norm(entry.name)))}:source);
       const publish=()=>{Runtime.check();const visible=visibleSources();onProgress?.({type,query,integrated:mergeMetadata(visible,type),sources:structuredClone(visible),loading:true});};publish();
       await Promise.all(specs.map(async(spec,index)=>{
         const result=await runSource(spec.id,spec.label,type,query,spec.run,items=>{sources[index].items=items;publish();});
-        sources[index]=result;publish();
+        sources[index]={...result,...(spec.searchUrl?{searchUrl:spec.searchUrl(query)}:{})};publish();
       }));
       // Expand failed foreign-language lookups with names returned by live sources,
       // not a local dictionary of presumed translations.

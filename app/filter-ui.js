@@ -69,7 +69,26 @@ class ResourceFilters {
       if (focused) [...menu.children].find(node => node.dataset.value === focused)?.focus({ preventScroll: true });
     });
     this.renderCompletion(host,onChange);
+    this.renderSaveFilter(host,onChange);
     if(!host.dataset.exclusiveMenus){host.dataset.exclusiveMenus='1';host.addEventListener('click',event=>{const summary=event.target.closest('summary');if(!summary)return;const current=summary.parentElement;host.querySelectorAll('details').forEach(menu=>{if(menu!==current)menu.open=false;});});document.addEventListener('pointerdown',event=>{if(!host.contains(event.target))host.querySelectorAll('details').forEach(menu=>menu.open=false);});}
+  }
+  shouldShowSaveFilter(view) { return view === 'game'; }
+  saveFilterOptions() { return ['all', 'has', 'none']; }
+  saveFilterLabel(value) { return ({ all:'全部存档', has:'有存档', none:'无存档' })[value] || '全部存档'; }
+  saveFilterMatches(value, snapshotCount) {
+    const count = Math.max(0, Number(snapshotCount) || 0);
+    if (value === 'has') return count > 0;
+    if (value === 'none') return count === 0;
+    return true;
+  }
+  renderSaveFilter(host,onChange) {
+    const select=document.getElementById('saveFilter'),visible=Boolean(select&&!select.classList.contains('hidden'));
+    let details=host.querySelector('[data-filter="saveFilter"]');
+    if(!visible){details?.remove();return;}
+    if(!details){details=document.createElement('details');details.className='filter-dropdown save-filter-dropdown';details.dataset.filter='saveFilter';details.innerHTML='<summary></summary><div class="filter-options" role="group" aria-label="按存档筛选"></div>';host.appendChild(details);}
+    const selected=select.value||'all';details.querySelector('summary').textContent='存档 · '+this.saveFilterLabel(selected);
+    const menu=details.querySelector('.filter-options');menu.replaceChildren();
+    for(const value of this.saveFilterOptions()){const button=document.createElement('button');button.type='button';button.className='filter-option'+(selected===value?' selected':'');button.dataset.value=value;button.textContent=this.saveFilterLabel(value);button.setAttribute('aria-pressed',String(selected===value));button.onclick=event=>{event.preventDefault();event.stopPropagation();select.value=value;details.open=false;onChange();};menu.appendChild(button);}
   }
   renderCompletion(host,onChange) {
     let details=host.querySelector('[data-filter="completion"]');

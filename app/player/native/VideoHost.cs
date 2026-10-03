@@ -17,12 +17,15 @@ class VideoHost {
   [DllImport("user32.dll")] static extern short GetAsyncKeyState(int key);
   [DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr h,out RECT rect);
   [DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
+  [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr window,out uint processId);
+  [DllImport("user32.dll")] static extern bool GetGUIThreadInfo(uint thread,ref GUITHREADINFO info);
   [DllImport("user32.dll")] static extern IntPtr WindowFromPoint(POINT point);
   [DllImport("user32.dll")] static extern IntPtr GetAncestor(IntPtr h,uint flags);
   [DllImport("user32.dll")] static extern bool GetCursorPos(out POINT point);
   [StructLayout(LayoutKind.Sequential)] struct POINT {public int x,y;}
   [DllImport("dwmapi.dll")] static extern int DwmGetWindowAttribute(IntPtr h,int attr,out RECT rect,int size);
   [StructLayout(LayoutKind.Sequential)] struct RECT {public int left,top,right,bottom;}
+  [StructLayout(LayoutKind.Sequential)] struct GUITHREADINFO {public uint size,flags;public IntPtr active,focus,capture,menuOwner,moveSize,caret;public RECT caretRect;}
   [DllImport("gdi32.dll")] static extern IntPtr CreateRectRgn(int left,int top,int right,int bottom);
   [DllImport("user32.dll")] static extern int SetWindowRgn(IntPtr hwnd,IntPtr region,bool redraw);
   [DllImport("gdi32.dll")] static extern bool DeleteObject(IntPtr region);
@@ -69,7 +72,7 @@ class VideoHost {
         if(m.Msg==0x201){SetFocus(Handle);Console.WriteLine("input Focus");}
         if(m.Msg==0x203){Console.WriteLine("input Toggle");m.Result=IntPtr.Zero;return;}
         if(m.Msg==0x20A&&(GetAsyncKeyState(0x11)&0x8000)==0){wheelRemainder+=(short)((m.WParam.ToInt64()>>16)&0xffff);while(Math.Abs(wheelRemainder)>=120){Console.WriteLine(wheelRemainder>0?"input WheelUp":"input WheelDown");wheelRemainder+=wheelRemainder>0?-120:120;}m.Result=IntPtr.Zero;return;}
-        if(m.Msg==0x100&&(GetAsyncKeyState(0x11)&0x8000)==0&&(GetAsyncKeyState(0x12)&0x8000)==0&&(GetAsyncKeyState(0x10)&0x8000)==0&&(GetAsyncKeyState(0x5B)&0x8000)==0&&(GetAsyncKeyState(0x5C)&0x8000)==0){int key=m.WParam.ToInt32();string command=key==37?"Left":key==39?"Right":key==38?"Up":key==40?"Down":key==32?"Space":key==70?"F":key==27?"Escape":null;bool repeated=(m.LParam.ToInt64()&(1L<<30))!=0;if(command!=null&&(!repeated||(key>=37&&key<=40))){Console.WriteLine("input "+command);m.Result=IntPtr.Zero;return;}}
+        if(m.Msg==0x100&&(GetAsyncKeyState(0x11)&0x8000)==0&&(GetAsyncKeyState(0x12)&0x8000)==0&&(GetAsyncKeyState(0x10)&0x8000)==0&&(GetAsyncKeyState(0x5B)&0x8000)==0&&(GetAsyncKeyState(0x5C)&0x8000)==0){int key=m.WParam.ToInt32();string command=key==37?"Left":key==39?"Right":key==38?"Up":key==40?"Down":key==32?"Space":key==70?"F":null;bool repeated=(m.LParam.ToInt64()&(1L<<30))!=0;if(command!=null&&(!repeated||(key>=37&&key<=40))){Console.WriteLine("input "+command);m.Result=IntPtr.Zero;return;}}
       }
       if(m.Msg==0x84){m.Result=new IntPtr(1);return;}
       if(m.Msg==0x20){sets++;Update();SetCursor(hidden?IntPtr.Zero:arrow);m.Result=new IntPtr(1);return;}
@@ -101,7 +104,7 @@ class VideoHost {
     new Thread(()=>{try{string line;while((line=Console.ReadLine())!=null){if(line.Length>128)break;commands.Add(line);}}finally{eof=true;}}){IsBackground=true}.Start();
     var timer=new System.Windows.Forms.Timer();timer.Interval=15;
     int previousAlt=-1,previousDown=-1;string previousFrames="",previousGeometry="";
-    var modifierThread=new Thread(()=>{bool wasDown=false;int gesture=0;POINT cursor=new POINT();RECT origin=new RECT();IntPtr active=IntPtr.Zero;while(!stopping){bool isDown=(GetAsyncKeyState(1)&0x8000)!=0;if(isDown&&!wasDown){gesture++;currentGesture=gesture;GetCursorPos(out cursor);active=GetAncestor(WindowFromPoint(cursor),2);GetWindowRect(active,out origin);}wasDown=isDown;if(modifierFile!=null){var bytes=new byte[40];bytes[0]=(byte)(((GetAsyncKeyState(0x12)&0x8000)!=0)?1:0);bytes[1]=(byte)(isDown?1:0);Buffer.BlockCopy(BitConverter.GetBytes(cursor.x),0,bytes,4,4);Buffer.BlockCopy(BitConverter.GetBytes(cursor.y),0,bytes,8,4);Buffer.BlockCopy(BitConverter.GetBytes(origin.left),0,bytes,12,4);Buffer.BlockCopy(BitConverter.GetBytes(origin.top),0,bytes,16,4);Buffer.BlockCopy(BitConverter.GetBytes(gesture),0,bytes,20,4);Buffer.BlockCopy(BitConverter.GetBytes(active.ToInt64()),0,bytes,24,8);modifierFile.Position=0;modifierFile.Write(bytes,0,bytes.Length);modifierFile.Flush();}Thread.Sleep(10);}}){IsBackground=true};modifierThread.Start();
+    var modifierThread=new Thread(()=>{bool wasDown=false,enterWasDown=false,escapeWasDown=false;int gesture=0;POINT cursor=new POINT();RECT origin=new RECT();IntPtr active=IntPtr.Zero;while(!stopping){bool isDown=(GetAsyncKeyState(1)&0x8000)!=0;if(isDown&&!wasDown){gesture++;currentGesture=gesture;GetCursorPos(out cursor);active=GetAncestor(WindowFromPoint(cursor),2);GetWindowRect(active,out origin);}wasDown=isDown;bool enterDown=(GetAsyncKeyState(0x0D)&0x8000)!=0,escapeDown=(GetAsyncKeyState(0x1B)&0x8000)!=0;POINT pointer;GetCursorPos(out pointer);IntPtr target=WindowFromPoint(pointer);bool surfaceTarget=target==host||IsChild(host,target);if(surfaceTarget&&GetForegroundWindow()==parent&&(GetAsyncKeyState(0x11)&0x8000)==0&&(GetAsyncKeyState(0x12)&0x8000)==0&&(GetAsyncKeyState(0x10)&0x8000)==0&&(GetAsyncKeyState(0x5B)&0x8000)==0&&(GetAsyncKeyState(0x5C)&0x8000)==0){if(enterDown&&!enterWasDown)Console.WriteLine("input Enter");if(escapeDown&&!escapeWasDown)Console.WriteLine("input Escape");}enterWasDown=enterDown;escapeWasDown=escapeDown;if(modifierFile!=null){var bytes=new byte[40];bytes[0]=(byte)(((GetAsyncKeyState(0x12)&0x8000)!=0)?1:0);bytes[1]=(byte)(isDown?1:0);Buffer.BlockCopy(BitConverter.GetBytes(cursor.x),0,bytes,4,4);Buffer.BlockCopy(BitConverter.GetBytes(cursor.y),0,bytes,8,4);Buffer.BlockCopy(BitConverter.GetBytes(origin.left),0,bytes,12,4);Buffer.BlockCopy(BitConverter.GetBytes(origin.top),0,bytes,16,4);Buffer.BlockCopy(BitConverter.GetBytes(gesture),0,bytes,20,4);Buffer.BlockCopy(BitConverter.GetBytes(active.ToInt64()),0,bytes,24,8);modifierFile.Position=0;modifierFile.Write(bytes,0,bytes.Length);modifierFile.Flush();}Thread.Sleep(10);}}){IsBackground=true};modifierThread.Start();
     timer.Tick+=(sender,e)=>{
       if(eof || !IsWindow(parent)){Application.ExitThread();return;}
       surfaceCursor.Update();
@@ -136,3 +139,4 @@ class VideoHost {
     timer.Start();Application.Run();timer.Stop();timer.Dispose();surfaceCursor.Restore();stopping=true;modifierThread.Join(200);if(modifierFile!=null)modifierFile.Dispose();DestroyWindow(host);return 0;
   }
 }
+

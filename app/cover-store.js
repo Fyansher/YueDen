@@ -34,6 +34,46 @@ class CoverStore {
     try { return this.saveBuffer(Buffer.from(url.slice(url.indexOf(',') + 1), 'base64')); }
     catch { return url; } // Never discard an existing image if conversion fails.
   }
+  compactForSync(state) {
+    return this.mapCovers(state, value => {
+      const compacted = this.compact(value);
+      if (/^data:image\//i.test(compacted)) throw Error('封面未能转换为本地内容寻址文件，已停止同步');
+      return compacted;
+    });
+  }
+  references(value) {
+    const references = new Map();
+    this.mapCovers(value, cover => {
+      const match = String(cover || '').match(/^um-cover:\/\/image\/([a-f0-9]{64}\.jpg)$/i);
+      if (match) references.set(match[1].slice(0, 64).toLowerCase(), 'um-cover://image/' + match[1].toLowerCase());
+      return cover;
+    });
+    return references;
+  }
+  readObject(reference) {
+    const file = this.fileFor(reference);
+    if (!file || !fs.existsSync(file)) throw Error('本地内容寻址封面文件缺失，无法上传');
+    const bytes = fs.readFileSync(file), expected = path.basename(file, '.jpg');
+    if (crypto.createHash('sha256').update(bytes).digest('hex') !== expected) throw Error('本地内容寻址封面校验失败，未上传');
+    return bytes;
+  }
+  storeObject(reference, bytes) {
+    const file = this.fileFor(reference);
+    if (!file || !Buffer.isBuffer(bytes) || bytes.length > 12 * 1024 * 1024) throw Error('云端封面对象无效，未写入本地');
+    const expected = path.basename(file, '.jpg'), actual = crypto.createHash('sha256').update(bytes).digest('hex');
+    if (actual !== expected) throw Error('云端封面对象哈希不匹配，未写入本地');
+    const image = this.nativeImage.createFromBuffer(bytes);
+    if (image.isEmpty()) throw Error('云端封面无法识别，未写入本地');
+    fs.mkdirSync(this.root(), { recursive: true });
+    if (fs.existsSync(file)) {
+      const current = fs.readFileSync(file);
+      if (crypto.createHash('sha256').update(current).digest('hex') === expected) return reference;
+    }
+    const temporary = file + '.download-' + crypto.randomBytes(6).toString('hex') + '.tmp';
+    try { fs.writeFileSync(temporary, bytes, { flag: 'wx' }); fs.renameSync(temporary, file); }
+    finally { fs.rmSync(temporary, { force: true }); }
+    return reference;
+  }
   portable(value) {
     const file = this.fileFor(value);
     if (!file) return value;
