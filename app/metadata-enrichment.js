@@ -121,8 +121,15 @@ function createProviders({ json, text, pace = 0, onEntry = () => {} }) {
     const modern = await get('https://api.bgm.tv/v0/search/subjects?limit=12', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ keyword: query, sort: 'match', filter: { type: [desiredType] } }) });
     const payload = list(modern?.data).length ? modern.data : (await get('https://api.bgm.tv/search/subject/' + encodeURIComponent(query) + '?type=' + desiredType + '&max_results=16'))?.list;
     const seeds = list(payload).filter(item => Number(item.type) === desiredType).slice(0, 10);
-    const entries = await map(seeds, async seed => {const entry=await bangumiDetail(seed,type,query);if(entry&&relevance(entry,query)>0)onEntry(entry);return entry;});
-    return entries.filter(entry => relevance(entry, query) > 0).sort((a,b) => relevance(b,query) - relevance(a,query));
+    // Search response fields are enough to identify a result. Subject, cast,
+    // staff and person pages are fetched only after the user picks one.
+    const entries=seeds.map(seed=>{
+      const platform=clean(seed.platform),comic=/漫画|マンガ|manga|comic/i.test(platform);
+      if(type==='manga'&&platform&&!comic||type==='book'&&comic)return null;
+      const publication=desiredType===1,entry={id:'bgm-'+seed.id,providerId:String(seed.id),name:seed.name_cn||seed.name||query,originalName:seed.name||'',cover:seed.images?.large||seed.images?.common||'',genres:unique(list(seed.tags).map(tag=>clean(tag.name||tag))).slice(0,8),developer:infoValue(seed,['作者','原作','著者','导演','監督']),releaseDate:seed.date||seed.air_date||'',externalRating:seed.rating?.score?String(seed.rating.score):'',episodes:publication?null:count(String(seed.total_episodes||seed.eps||'')),description:clean(seed.summary||''),storeUrl:'https://bgm.tv/subject/'+seed.id,metadataSource:'Bangumi 番组计划',editionKind:type==='manga'?'系列':''};
+      return relevance(entry,query)>0?entry:null;
+    }).filter(Boolean).sort((a,b)=>relevance(b,query)-relevance(a,query));
+    entries.forEach(onEntry);return entries;
   }
   async function editionRecord(edition, work = {}) {
     const authorNames = await map(list(edition.authors).slice(0, 4), async author => { const key = author.key || author.author?.key; if (!/^\/authors\/OL\d+A$/.test(key || '')) return null; const person = await get('https://openlibrary.org' + key + '.json'); return person?.name; });
@@ -137,57 +144,28 @@ function createProviders({ json, text, pace = 0, onEntry = () => {} }) {
     const entry=await editionRecord(edition);onEntry(entry);return entry;
   }
   async function openLibrarySearch(query) {
-    const payload = await get('https://openlibrary.org/search.json?title=' + encodeURIComponent(query) + '&lang=zh&limit=4&fields=key,title,author_name');
-    const batches = await map(list(payload?.docs).slice(0, 4), async work => {
-      if (/^OL\d+W$/.test(work.key || '')) work.key = '/works/' + work.key;
-      if (!/^\/works\/OL\d+W$/.test(work.key || '')) return [];
-      const [editionPage, fullWork] = await Promise.all([get('https://openlibrary.org' + work.key + '/editions.json?limit=30'), get('https://openlibrary.org' + work.key + '.json')]);
-      const entries = list(editionPage?.entries).sort((a,b) => Number(list(b.languages).some(lang => /\/(chi|zho)$/.test(lang.key))) - Number(list(a.languages).some(lang => /\/(chi|zho)$/.test(lang.key))));
-      return map(entries.slice(0, 2), async edition => {const entry=await editionRecord(edition, { ...work, ...fullWork, author_name: work.author_name });onEntry(entry);return entry;});
-    });
-    return batches.flat();
+    const fields='key,title,author_name,first_publish_year,isbn,cover_i';
+    const payload=await get('https://openlibrary.org/search.json?title='+encodeURIComponent(query)+'&lang=zh&limit=8&fields='+fields);
+    const entries=list(payload?.docs).slice(0,8).filter(work=>/^OL\d+W$/.test(work.key||'')).map(work=>{
+      const codes=list(work.isbn).map(isbn).filter(Boolean),entry={id:'openlibrary-'+work.key,providerId:work.key,name:work.title||query,developer:list(work.author_name).join('、'),cover:Number(work.cover_i)>0?'https://covers.openlibrary.org/b/id/'+work.cover_i+'-M.jpg':'',storeUrl:'https://openlibrary.org/works/'+work.key,editionKind:codes.length===1?'edition':'系列',metadataSource:'Open Library'};
+      if(codes.length===1)entry.isbn=codes[0];
+      return entry;
+    });entries.forEach(onEntry);return entries;
   }
   async function doubanSearch(query) {
     const payload = await get('https://book.douban.com/j/subject_suggest?q=' + encodeURIComponent(query));
-    return map(list(payload).slice(0, 8), async seed => {
+    const entries=list(payload).slice(0, 8).map(seed => {
       const id = String(seed.id || seed.url?.match(/subject\/(\d+)/)?.[1] || ''); if (!/^\d+$/.test(id)) return null;
       const url = 'https://book.douban.com/subject/' + id + '/';
-      const entry=doubanBook(await html(url), { id: 'douban-book-' + id, name: seed.title || query, developer: clean(Array.isArray(seed.author_name) ? seed.author_name.join('、') : seed.author_name), releaseDate: String(seed.year || ''), cover: seed.pic || seed.img || '', storeUrl: url, metadataSource: '豆瓣读书', genres: [] });onEntry(entry);return entry;
-    });
+      return {id:'douban-book-'+id,providerId:id,name:seed.title||query,developer:clean(Array.isArray(seed.author_name)?seed.author_name.join('、'):seed.author_name),releaseDate:String(seed.year||''),cover:seed.pic||seed.img||'',storeUrl:url,metadataSource:'豆瓣读书',genres:[],detailsUnavailable:true};
+    }).filter(Boolean);entries.forEach(onEntry);return entries;
   }
   async function publicationSearch(query, type) {
     const [douban, bangumi] = await Promise.all([doubanSearch(query), bangumiSearch(query, type)]);
     // A generic title can name both a novel and its manga adaptation.
     const matchingDouban = type === 'manga' ? douban.filter(entry => /漫画|マンガ|comic|manga/i.test([entry.name, ...list(entry.genres)].join(' ')) || bangumi.some(other => sameWork(entry, other))) : douban;
-    let entries = [...matchingDouban, ...bangumi];
-    if (type === 'manga') {
-      const volumes = await map(bangumi.filter(entry => !entry.isbn && !entry.pages).slice(0, 2), async series => {
-        const related = list(await get('https://api.bgm.tv/v0/subjects/' + series.providerId + '/subjects')).filter(item => item.type === 1 && item.relation === '单行本');
-        if (related.length) series.editionKind = '系列';
-        return map(related.slice(0, 24), async seed => {
-          const volume = await bangumiDetail(seed, type); if (!volume) return null;
-          const number = (seed.name || '').match(/[（(]\s*(\d+)\s*[)）]\s*$/)?.[1];
-          if (number && chinese(series.name) && !chinese(volume.name)) volume.name = series.name + ' (' + String(Number(number)).padStart(2,'0') + ')';
-          volume.editionKind = '单行本'; volume.metadataSource += ' · 单行本'; return volume;
-        });
-      });
-      entries.push(...volumes.flat());
-    }
-    if (entries.some(entry => !entry.pages || !entry.isbn) || !entries.length) {
-      const known = unique(entries.map(entry => entry.isbn));
-      const supplements = await map(known, byIsbn);
-      // Without an ISBN, show precise-edition alternatives instead of copying random page counts.
-      if (!known.length && type === 'book') supplements.push(...await openLibrarySearch(query));
-      entries = entries.map(entry => {
-        for (const extra of [...bangumi, ...supplements]) {
-          if (entry.id === extra.id) continue;
-          if (sameEdition(entry, extra)) entry = fillMissing(entry, extra, ['developer','publisher','translator','isbn','pages','releaseDate','description','cover','genres']);
-          else if (sameWork(entry, extra)) entry = fillMissing(entry, extra, ['description','genres']);
-        }
-        return entry;
-      });
-      for (const extra of supplements) if (!entries.some(entry => sameEdition(entry, extra))) entries.push(extra);
-    }
+    const openLibrary=await openLibrarySearch(query);
+    let entries=[...matchingDouban,...bangumi,...openLibrary];
     const seen = new Set();
     return entries.filter(entry => { const key = entry.isbn || entry.id; if (seen.has(key)) return false; seen.add(key); return true; }).sort((a,b) => {
       const rank = relevance(b,query) - relevance(a,query) || Number(chinese(b.name)) - Number(chinese(a.name));
@@ -205,27 +183,29 @@ function createProviders({ json, text, pace = 0, onEntry = () => {} }) {
     return unique(list(result?.data).flatMap(character => list(character.voice_actors).filter(actor => actor.language === 'Japanese').map(actor => clean(actor.person?.name))));
   }
   async function animeSearch(query) {
-    const primary = await bangumiSearch(query, 'anime');
-    if (!primary.length) return map(await jikanSearch(query), async entry => ({ ...entry, cast: await jikanCast(entry) }));
-    return map(primary, async entry => {
-      if (entry.cast.length && entry.episodes) return entry;
-      const alternatives = await jikanSearch(entry.originalName || entry.name);
-      const other = alternatives.find(other => names(entry).some(name => names(other).includes(name)) && entry.releaseDate?.slice(0,4) === other.releaseDate?.slice(0,4));
-      if (!other) return entry;
-      if (!entry.cast.length) other.cast = await jikanCast(other);
-      return fillMissing(entry, other, ['cast', 'episodes']);
-    });
+    const primary=await bangumiSearch(query,'anime');
+    return primary.length?primary:jikanSearch(query,'anime');
   }
   async function bangumiPublication(query,type) {
-    const entries=await bangumiSearch(query,type);
-    if(type!=='manga')return entries;
-    const batches=await map(entries.filter(entry=>!entry.isbn&&!entry.pages).slice(0,2),async series=>{
-      const related=list(await get('https://api.bgm.tv/v0/subjects/'+series.providerId+'/subjects')).filter(item=>item.type===1&&item.relation==='单行本');
-      if(related.length)series.editionKind='系列';
-      return map(related.slice(0,24),async seed=>{const volume=await bangumiDetail(seed,type);if(!volume)return null;const number=(seed.name||'').match(/[（(]\s*(\d+)\s*[)）]\s*$/)?.[1];if(number&&chinese(series.name)&&!chinese(volume.name))volume.name=series.name+' ('+String(Number(number)).padStart(2,'0')+')';volume.editionKind='单行本';onEntry(volume);return volume;});
-    });
-    return [...entries,...batches.flat()];
+    return bangumiSearch(query,type);
   }
-  return { bookSearch: query => publicationSearch(query, 'book'), mangaSearch: query => publicationSearch(query, 'manga'), animeSearch, bangumiSearch, bangumiPublication, doubanSearch, openLibrarySearch, byIsbn, jikanSearch, jikanCast };
+  async function resolveCandidate(seed,type) {
+    const source=seed?._sourceId||'',id=String(seed?.providerId||'');
+    if(source==='bangumi'&&/^\d+$/.test(id))return bangumiDetail({id,name:seed.name,providerId:id},type,seed.name);
+    if(source==='douban'&&/^\d+$/.test(id)&&type==='book')return doubanBook(await html('https://book.douban.com/subject/'+id+'/'),seed);
+    if(source==='myanimelist')return {...seed,cast:type==='anime'?await jikanCast(seed):seed.cast||[]};
+    if(source==='openlibrary'){
+      if(seed.isbn)return await byIsbn(seed.isbn)||seed;
+      const workKey=id.startsWith('/works/')?id:'/works/'+id;
+      if(!/^\/works\/OL\d+W$/.test(workKey))return seed;
+      const payload=await get('https://openlibrary.org'+workKey+'/editions.json?limit=20'),work=await get('https://openlibrary.org'+workKey+'.json');
+      const editions=list(payload?.entries).sort((a,b)=>Number(list(b.languages).some(lang=>/\/(chi|zho)$/.test(lang.key)))-Number(list(a.languages).some(lang=>/\/(chi|zho)$/.test(lang.key))));
+      if(editions.length===1&&Number(payload?.size)===1){const entry=await editionRecord(editions[0],{...work,title:seed.name,author_name:[seed.developer]});return {...seed,...entry,editionKind:'edition',detailsUnavailable:false};}
+      const description=clean(work?.description?.value||work?.description||'');
+      return {...seed,description:description||seed.description||'',genres:list(work?.subjects).slice(0,8).map(clean),editionKind:'系列',detailsUnavailable:!description&&!seed.description};
+    }
+    return seed;
+  }
+  return { bookSearch: query => publicationSearch(query, 'book'), mangaSearch: query => publicationSearch(query, 'manga'), animeSearch, bangumiSearch, bangumiPublication, bangumiDetail, doubanSearch, openLibrarySearch, byIsbn, jikanSearch, jikanCast, editionRecord, doubanBook, resolveCandidate };
 }
 module.exports = { createProviders, isbn, count, sameWork, sameEdition, refreshMatch, fillMissing, doubanBook, infoValue, elementBody, norm, names, relevance };

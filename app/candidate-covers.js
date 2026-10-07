@@ -1,6 +1,6 @@
 /* Same validated local image cache for search thumbnails and selected entries.
    Small bounded queue, cancellation per search, no base64 travelling into UI. */
-function createCandidateCovers({request,compact,concurrency=4,lookup=()=>'',remember=()=>{},exists=()=>true,forget=()=>{}}) {
+function createCandidateCovers({request,compact,dimensions=()=>null,concurrency=4,lookup=()=>'',remember=()=>{},exists=()=>true,forget=()=>{}}) {
   const cache=new Map(),failed=new Map(),pending=new Map(),controllers=new Map(),retired=new Set(),queue=[];let active=0;
   const pump=()=>{while(active<concurrency&&queue.length){const job=queue.shift();active++;Promise.resolve().then(job.work).then(job.resolve,()=>job.resolve('')).finally(()=>{active--;pump();});}};
   const enqueue=work=>new Promise(resolve=>{queue.push({work,resolve});pump();});
@@ -25,6 +25,13 @@ function createCandidateCovers({request,compact,concurrency=4,lookup=()=>'',reme
       }return '';
     });pending.set(taskKey,task);try{return await task;}finally{pending.delete(taskKey);}
   }
-  return {resolve,cancel,forget:url=>{cache.delete(url);failed.delete(url);forget(url);},cached:url=>{const ref=cache.get(url)||lookup(url);return ref&&exists(ref)?ref:'';}};
+  async function resolveDetailed(values,options={}){
+    const urls=[...new Set((Array.isArray(values)?values:[]).filter(v=>typeof v==='string'&&v.length<6000&&/^(https:\/\/|um-cover:\/\/image\/)/i.test(v)))].slice(0,8);
+    const reference=await resolve(urls,options);if(!reference)return {reference:'',sourceUrl:'',dimensions:null};
+    const sourceUrl=urls.find(url=>url===reference||cache.get(url)===reference||lookup(url)===reference)||'';
+    let size=null;try{size=sourceUrl&&reference.startsWith('um-cover:')?dimensions(reference):null;}catch{}
+    return {reference,sourceUrl,dimensions:size&&size.width>0&&size.height>0?{width:size.width,height:size.height}:null};
+  }
+  return {resolve,resolveDetailed,cancel,forget:url=>{cache.delete(url);failed.delete(url);forget(url);},cached:url=>{const ref=cache.get(url)||lookup(url);return ref&&exists(ref)?ref:'';}};
 }
 module.exports={createCandidateCovers};

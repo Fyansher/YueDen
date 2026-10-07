@@ -1,5 +1,5 @@
 function rememberRowOverride(row,key,value){if(!row.scanInfo)return;row.scanInfo.userOverrides={...row.scanInfo.userOverrides,[key]:value};}
-function installScanOptions(job){importNetworkControls(job,$('localRootList'));}
+function installScanOptions(job){importResourceControls(job,$('localRootList'),undefined,{gameExeFilter:job.type==='game'});}
 function renderScanEvidence(el,row){
  if(!row.scanInfo){renderScanLaunchChoice(el,row);return;}
  const typeName=t=>TYPE_NAMES[t]||({comic:'漫画',video:'影视',software:'非游戏软件',unknown_application:'用途未确定的程序',unknown_file:'待识别文件'}[t])||t,boundaryName=t=>({individual_file:'独立文件',individual_application:'独立应用入口',application_installation:'同一安装的多个入口',resource_package:'独立资源包',image_collection:'图片集合',resource_series:'系列资源'}[t])||t;

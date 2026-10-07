@@ -88,10 +88,10 @@ function openResourcePathMenu(clearOnly, event) {
 function renderMetadataCoverage(candidate = {}) {
   editorMetadata = { originalName:candidate.originalName||'',aliases:candidate.aliases||[],identifiers:candidate.identifiers||{},steamPlaytime:candidate.steamPlaytime??null,steamPlaytimeAt:candidate.steamPlaytimeAt||'',playtimeSource:candidate.playtimeSource||'',metadataSource: candidate.metadataSource || '', fieldSources: candidate.fieldSources || {}, editionKind: candidate.editionKind || '', ratingSource: candidate.ratingSource || RatingModel.source(candidate, $('fieldType').value), ratingValue: candidate.ratingValue ?? null, ratingMax: candidate.ratingMax ?? null, ratingEdited: Boolean(candidate.ratingEdited), platforms: PlatformModel.detect(candidate), platformsManual: Boolean(candidate.platformsManual), platformLinks: candidate.platformLinks || {} };
   const type = $('fieldType').value;
-  const fields = type === 'book' || type === 'manga' ? { developer: '作者', publisher: '出版社', isbn: 'ISBN', pages: '页数', translator: '译者' } : type === 'anime' ? { developer: '制作 / 导演', cast: '声优', episodes: '集数' } : {};
-  const missing = Object.keys(fields).filter(key => Array.isArray(candidate[key]) ? !candidate[key].length : !candidate[key]);
   const hint = $('metadataCoverage'); hint.classList.toggle('hidden', !candidate.metadataSource);
-  hint.textContent = candidate.metadataSource ? candidate.metadataSource + (candidate.editionKind === '系列' ? ' · 系列无统一 ISBN 和页数，可选择单行本候选获取版本信息。' : missing.length ? ' · 未确认：' + missing.map(key => fields[key]).join('、') : ' · 已取得可用信息') : '';
+  hint.textContent = candidate.metadataSource || '';
+  const localOnly=['audio','software','document','unknown_application','unknown_collection'].includes(type);
+  $('metadataBtn').parentElement.classList.toggle('hidden',localOnly&&type!=='audio'&&!candidate.metadataSource);
 }
 
 function installTextAreaResize() {

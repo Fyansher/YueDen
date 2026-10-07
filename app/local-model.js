@@ -44,27 +44,12 @@
   }return next;
  }
  function searchName(name){return cleanTitle(String(name||'').replace(/\.(exe|appref-ms)$/i,'')).replace(/\.(exe|appref-ms)$/i,'').replace(/([a-z])([A-Z])/g,'$1 $2').replace(/[._]+/g,' ').replace(/\s*\[([^\]]*(?:x64|x86|build|repack|rip|中文|汉化|1080p|720p)[^\]]*)\]\s*/gi,' ').replace(/\s*\(?\b(?:v(?:er(?:sion)?)?\s*\d+(?:[ .]\d+)+|build\s*\d+|x64|x86|win64|win32)\b\)?\s*$/gi,'').replace(/\s+/g,' ').trim();}
- function oneEdit(a,b){if(Math.abs(a.length-b.length)>1)return false;let i=0,j=0,edits=0;while(i<a.length&&j<b.length){if(a[i]===b[j]){i++;j++;continue;}if(++edits>1)return false;if(a.length===b.length){if(a[i]===b[j+1]&&a[i+1]===b[j]){i+=2;j+=2;}else{i++;j++;}}else if(a.length>b.length)i++;else j++;}return edits+(i<a.length||j<b.length?1:0)<=1;}
- function matchConfidence(name,candidate){
-  const values=[candidate.name,candidate.originalName,...candidate.aliases||[]].filter(Boolean);
-  // A source often writes its translated title followed by the official original in parentheses.
-  const originals=values.flatMap(value=>[...String(value).matchAll(/[（(]([^()（）]+)[）)]/g)].map(m=>m[1]).filter(value=>/[a-z]{3}/i.test(value)&&!/^(?:demo|dlc|windows|pc|x64|repack|中文版)$/i.test(value)));
-  const a=canonical(searchName(name)),names=[...values,...originals].map(n=>({raw:searchName(n),key:canonical(searchName(n))}));
-  if(!a||a.length<2)return 0;if(names.some(n=>n.key===a))return 1;
-  const digits=s=>(s.match(/\d+/g)||[]).join(',');let score=0;
-  for(const n of names){if(digits(a)!==digits(n.key))continue;
-   if(a.length>=6&&/^[a-z\d]+$/.test(a)&&/^[a-z\d]+$/.test(n.key)&&oneEdit(a,n.key))score=Math.max(score,.94);
-   const subtitle=n.raw.split(/[:：–—]/)[0];if(a.length>=5&&canonical(subtitle)===a)score=Math.max(score,.97);
-   if(a.length>=5&&n.key.startsWith(a)&&n.key.length-a.length<5)score=Math.max(score,.82);
-  }return score;
- }
- function preferredCandidates(type,bundle){if(Array.isArray(bundle))return bundle;const steam=bundle.sources?.find(s=>s.id==='steam')?.items||[];return type==='game'&&steam.length?steam:bundle.integrated||[];}
- function automaticCandidate(name,type,bundle){
-  const items=preferredCandidates(type,bundle),ranked=items.map(candidate=>({candidate,score:matchConfidence(name,candidate)})).sort((a,b)=>b.score-a.score),best=ranked[0];if(!best||best.score<.94)return null;
-  const identity=c=>c.steamAppId?'steam:'+c.steamAppId:c.isbn?'isbn:'+c.isbn:c.id?String(c.id):canonical(c.name)+'|'+(c.releaseDate||'')+'|'+(c.developer||'');
-  if(ranked.slice(1).some(other=>other.score>=best.score-.03&&identity(other.candidate)!==identity(best.candidate)))return null;
-  return best.candidate;
+ function preferredCandidates(type,bundle){if(Array.isArray(bundle))return bundle;return bundle.integrated||[];}
+ function automaticCandidate(_name,type,bundle){
+  const candidate=preferredCandidates(type,bundle)[0];
+  if(!candidate?.name||/^(?:未命名资源|appid[ _:-]*\d+)/i.test(candidate.name))return null;
+  return candidate;
  }
 
- const api={types,video,images,books,pathKey,base,stem,natural,canonical,cleanTitle,titleInfo,detectedType,members,same,mergeFiles,fillMissing,searchName,matchConfidence,preferredCandidates,automaticCandidate};if(typeof module!=='undefined')module.exports=api;else root.LocalModel=api;
+ const api={types,video,images,books,pathKey,base,stem,natural,canonical,cleanTitle,titleInfo,detectedType,members,same,mergeFiles,fillMissing,searchName,preferredCandidates,automaticCandidate};if(typeof module!=='undefined')module.exports=api;else root.LocalModel=api;
 })(typeof window!=='undefined'?window:globalThis);

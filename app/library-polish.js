@@ -1,8 +1,7 @@
 /* List rows are a separate layout: no cover overlays or genre clutter. */
 function smallCardHtml(item) {
-  const image=stableCoverFor(item,['book','manga'].includes(item.type)?'portrait':'landscape');
   return '<article class="resource-card small-card" draggable="true" data-id="'+esc(item.id)+'" data-media-type="'+esc(item.type)+'" data-achievement="'+(item.type==='game'&&item.status==='全成就')+'">'+
-    '<div class="card-cover">'+(image?'<img loading="lazy" decoding="async" src="'+esc(image)+'" alt="'+esc(item.name)+'">':'<span class="list-cover-empty" aria-label="暂无封面">◇</span>')+'</div>'+
+    '<div class="card-cover">'+cardImage(item,coverDirectionForLayout(item,'small'))+'</div>'+
     '<div class="card-body"><div class="card-title" title="'+esc(item.name)+'">'+esc(item.name)+'</div><div class="small-card-status">'+cardStatusMarkup(item)+'</div></div></article>';
 }
 

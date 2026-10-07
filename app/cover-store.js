@@ -4,10 +4,15 @@ const crypto = require('node:crypto');
 
 // Small references in library.json; one content-addressed file per image.
 class CoverStore {
-  constructor(root, nativeImage) { this.root = root; this.nativeImage = nativeImage; this.converted = new Map(); }
+  constructor(root, nativeImage) { this.root = root; this.nativeImage = nativeImage; this.converted = new Map(); this.dimensionsCache=new Map(); }
   fileFor(reference) {
     const match = String(reference || '').match(/^um-cover:\/\/image\/([a-f0-9]{64}\.jpg)$/);
     return match ? path.join(this.root(), match[1]) : null;
+  }
+  dimensions(reference) {
+    const file=this.fileFor(reference);if(!file||!fs.existsSync(file))return null;
+    const key=String(reference);if(this.dimensionsCache.has(key))return this.dimensionsCache.get(key);
+    try{const image=this.nativeImage.createFromBuffer(fs.readFileSync(file));if(image.isEmpty())return null;const size=image.getSize();if(!(size.width>0&&size.height>0))return null;this.dimensionsCache.set(key,size);while(this.dimensionsCache.size>2000)this.dimensionsCache.delete(this.dimensionsCache.keys().next().value);return size;}catch{return null;}
   }
   saveBuffer(buffer) {
     if (buffer.length > 12 * 1024 * 1024) throw Error('图片需要小于 12 MB');
@@ -24,6 +29,7 @@ class CoverStore {
     const file = path.join(this.root(), name);
     if (!fs.existsSync(file)) fs.writeFileSync(file, compact, { flag: 'wx' });
     const reference = 'um-cover://image/' + name;
+    this.dimensionsCache.set(reference,{width,height});
     if (this.converted.size >= 256) this.converted.clear();
     this.converted.set(sourceHash, reference);
     return reference;

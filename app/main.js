@@ -1,15 +1,31 @@
-const { app, BrowserWindow, Menu, dialog: rawDialog, ipcMain: rawIpcMain, shell, globalShortcut, nativeImage, protocol, net, screen } = require('electron');
+const { app, BrowserWindow, Menu, dialog: rawDialog, ipcMain: rawIpcMain, shell, globalShortcut, nativeImage, protocol, net, screen, session } = require('electron');
 const path = require('path');
 const ipcMain=require('./ipc-guard').create(rawIpcMain,__dirname);
 const fs = require('fs');
 const {randomBytes,randomUUID,createHash}=require('node:crypto');
 const webdavDiagnosticModule=require('./webdav-diagnostic-log'),webdavDiagnosticLog=webdavDiagnosticModule.create(()=>app.getPath('userData'),()=>{const packageInfo=require('./package.json'),version=app.getVersion?.()||packageInfo.version;return {appVersion:version,buildId:process.env.YUEDEN_BUILD_ID||packageInfo.buildId||version,schemaVersion:require('./webdav-state').SYNC_SCHEMA_VERSION};});
+const metadataDiagnosticLog=require('./metadata-diagnostic-log').create({directory:()=>path.join(app.getPath('userData'),'logs'),appVersion:app.getVersion?.()||require('./package.json').version,buildId:process.env.YUEDEN_BUILD_ID||require('./package.json').buildId||require('./package.json').version});
 let webdavOperationSignal=null;
 const webdavProtocol=require('./webdav-client'),webdavClient=webdavProtocol.create({operationSignal:()=>webdavOperationSignal,onDiagnostic:row=>webdavDiagnosticLog.write(row)});
 const webdavTestClient=webdavProtocol.create({timeout:4000,onDiagnostic:row=>webdavDiagnosticLog.write(row)});
 const dialog=require('./dialog-memory').wrap(rawDialog,()=>app.getPath('userData'));
 const https = require('https');
 const MetadataText = require('./metadata-text');
+const MetadataNetwork = require('./metadata-network');
+const SteamSearchResults=require('./steam-search-results');
+const SteamCandidateResolution=require('./steam-candidate-resolution');
+const METADATA_SESSION_PARTITION = 'persist:yueden-metadata';
+const METADATA_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) UnifiedManager/2.0';
+let metadataHttpSession = null;
+function getMetadataHttpSession() {
+  if (!metadataHttpSession) {
+    metadataHttpSession = session.fromPartition(METADATA_SESSION_PARTITION);
+    metadataHttpSession.setUserAgent(METADATA_USER_AGENT);
+  }
+  return metadataHttpSession;
+}
+const metadataSourceLocations=require('./metadata-source-locations').create({file:()=>path.join(app.getPath('userData'),'metadata-source-locations.json')});
+const metadataVerificationWindow = require('./metadata-verification-window').create({BrowserWindow,partition:METADATA_SESSION_PARTITION,userAgent:METADATA_USER_AGENT});
 const StatusModel = require('./status-model');
 const CoverStore = require('./cover-store');
 const createFileDialogs = require('./file-dialogs');
@@ -20,13 +36,24 @@ const RatingModel = require('./rating-model');
 const PlatformModel = require('./platform-model');
 const MetadataRuntime = require('./metadata-runtime');
 const { createGameSources, gameTerms } = require('./game-sources');
-const gameSources = createGameSources({json:(...args)=>fetchJson(...args),text:(...args)=>fetchText(...args),steam:(query,emit)=>metadataSearchSteam('game',query,emit),aliases:query=>gameSearchTerms(query).map(term=>term.replace(/ WINDOWS EDITION$/i,''))});
-const sourceSearch = createSourceSearch({ json: (...args) => fetchJson(...args), text: (...args) => fetchText(...args), settings: loadSettings });
+const renderMetadataHtml=require('./metadata-render-service').create({readRenderedDom:(...args)=>metadataVerificationWindow.readRenderedDom(...args),sourceLocations:metadataSourceLocations,network:MetadataNetwork,runtime:MetadataRuntime,fetchText:(...args)=>fetchMetadataText(...args)});
+const bookSourceEndpoints=require('./book-source-endpoints').create({file:()=>path.join(app.getPath('userData'),'book-source-endpoints.json'),fetchText:(url,timeout)=>fetchMetadataText(url,timeout,'')});
+const gameSources = createGameSources({json:(...args)=>fetchMetadataJson(...args),text:(...args)=>fetchMetadataText(...args),steam:(query,emit)=>metadataSearchSteam('game',query,emit),aliases:query=>gameSearchTerms(query).map(term=>term.replace(/ WINDOWS EDITION$/i,'')),settings:loadSettings,diagnostics:row=>metadataDiagnosticLog.write(row)});
+const sourceSearch = createSourceSearch({
+  json: (url,timeout,options,sourceId) => fetchMetadataJson(url,timeout,options,sourceId),
+  text: (url,timeout,sourceId,diagnosticContext) => fetchMetadataText(url,timeout,sourceId,diagnosticContext),
+  sourceHome: sourceId => metadataSourceLocations.homeFor(sourceId,({onelib:'https://zh.1lib.sk/',zlibrary:'https://zh.zlib.bz/'}[sourceId]||'')),
+  sourceVerified: sourceId => metadataSourceLocations.isVerified(sourceId),
+  renderHtml:renderMetadataHtml,
+  bookSourceEndpoints,
+  settings: loadSettings,
+  diagnostics:row=>metadataDiagnosticLog.write(row)
+});
 const { pathToFileURL } = require('node:url');
 protocol?.registerSchemesAsPrivileged([{ scheme: 'um-cover', privileges: { standard: true, secure: true, supportFetchAPI: true } },{scheme:'um-audio',privileges:{standard:true,secure:true,supportFetchAPI:true,stream:true,corsEnabled:true}},{scheme:'um-media',privileges:{standard:true,secure:true,supportFetchAPI:true,stream:true,corsEnabled:true}}]);
 const coverStore = new CoverStore(() => path.join(app.getPath('userData'), 'cover-cache'), nativeImage);
 const coverUrlCache=require('./cover-url-cache').createCoverUrlCache(coverStore);
-const candidateCoverCache = require('./candidate-covers').createCandidateCovers({request:requestImageOverHttps,compact:value=>coverStore.compact(value),...coverUrlCache});
+const candidateCoverCache = require('./candidate-covers').createCandidateCovers({request:requestImageOverHttps,compact:value=>coverStore.compact(value),dimensions:reference=>coverStore.dimensions(reference),...coverUrlCache});
 
 // Unified Manager is intentionally portable: data lives beside the executable.
 const executableRoot = path.dirname(process.execPath);
@@ -44,6 +71,8 @@ const legacySettingsFile = () => path.join(portableRoot, 'settings.json');
 const initialState = { items: [], categories: ['PC', '主机', '掌机', '独立游戏', '科幻', '待读', '年度候选'], deletedItems: [], deletedSaveSnapshots: [] };
 const initialSettings = {
   obsidianRoot: '', steamApiKey: '', steamId: '',
+  scanGamesRequireExe: false,
+  metadataPrimarySourceByType: { game:'steam', movie:'douban', anime:'bangumi', manga:'bangumi', book:'douban' },
   webdavUrl: '', webdavUsername: '', webdavPassword: '', webdavRemotePath: 'YueDen', lastWebdavSyncAt: '',
   appearance: { theme: 'ocean', accent: '#65d8b0', density: 'comfortable', animations: true, defaultView: 'dashboard' },
   disguiseEnabled: false, disguiseProfile: 'course', disguiseVideoUrl: '', confirmBeforeDelete: true, deleteCloudSaveWithLocal: true,
@@ -69,6 +98,7 @@ function clone(value) {
 
 function normaliseItem(item, index = 0) {
   const value = coverStore.compactItem(item && typeof item === 'object' ? item : {});
+  const coverDimensions=coverStore.dimensions(value.cover),measuredCoverOrientation=require('./cover-classifier').classify(coverDimensions?.width,coverDimensions?.height);
   return {
     ...require('./library-relations').itemFields(value),
     id: value.id || `item-${Date.now()}-${index}`,
@@ -83,6 +113,9 @@ function normaliseItem(item, index = 0) {
     cover: coverStore.compact(value.cover || ''),
     coverPortrait: coverStore.compact(value.coverPortrait || ''),
     coverLandscape: coverStore.compact(value.coverLandscape || ''),
+    ...(['portrait','landscape','square'].includes(value.coverOrientation||measuredCoverOrientation) ? { coverOrientation:value.coverOrientation||measuredCoverOrientation } : {}),
+    ...(typeof value.coverShared === 'boolean' ? { coverShared:value.coverShared } : {}),
+    ...(value.coverDisplayDirection === 'portrait' || value.coverDisplayDirection === 'landscape' ? { coverDisplayDirection: value.coverDisplayDirection } : {}),
     networkCovers: Object.fromEntries(['cover', 'coverPortrait', 'coverLandscape'].map(key => [key, /^https?:\/\//i.test(value.networkCovers?.[key] || '') ? value.networkCovers[key] : /^https?:\/\//i.test(value[key] || '') ? value[key] : ''])),
     customCovers: Array.isArray(value.customCovers) ? value.customCovers.filter(key => ['cover', 'coverPortrait', 'coverLandscape'].includes(key)) : [],
     genres: Array.isArray(value.genres) ? value.genres.filter(Boolean) : [],
@@ -195,11 +228,11 @@ function secretSettings(){return secretSettingsInstance||(secretSettingsInstance
 function loadSettings() {
   if (fs.existsSync(settingsFile())) {
     const saved = secretSettings().migrate(JSON.parse(fs.readFileSync(settingsFile(),'utf8')),settingsFile());
-    return { ...initialSettings, ...saved, appearance: { ...initialSettings.appearance, ...(saved.appearance || {}) } };
+    return { ...initialSettings, ...saved, metadataPrimarySourceByType:{...initialSettings.metadataPrimarySourceByType,...(saved.metadataPrimarySourceByType||{})}, appearance: { ...initialSettings.appearance, ...(saved.appearance || {}) } };
   }
   if (fs.existsSync(legacySettingsFile())) {
     const legacy = readJson(legacySettingsFile(), initialSettings);
-    const migrated = { ...initialSettings, ...legacy, appearance: { ...initialSettings.appearance, ...(legacy.appearance || {}) } };
+    const migrated = { ...initialSettings, ...legacy, metadataPrimarySourceByType:{...initialSettings.metadataPrimarySourceByType,...(legacy.metadataPrimarySourceByType||{})}, appearance: { ...initialSettings.appearance, ...(legacy.appearance || {}) } };
     writeJson(settingsFile(), migrated);
     return migrated;
   }
@@ -227,16 +260,27 @@ async function materializeCover(url) {
 }
 
 async function materializeCandidateCovers(entry, raw = '', index = 0, cache = new Map()) {
-  const base = entry.cover || entry.coverPortrait || entry.coverLandscape || generatedCover(entry.name || raw, index);
-  const urls = { cover: base, coverPortrait: entry.coverPortrait || base, coverLandscape: entry.coverLandscape || base };
-  const images = Object.fromEntries(await Promise.all(Object.entries(urls).map(async ([key, url]) => {
-    if (!cache.has(url)) cache.set(url, materializeCover(url));
-    return [key, (await cache.get(url)) || base];
+  const original={cover:entry.cover||'',coverPortrait:entry.coverPortrait||'',coverLandscape:entry.coverLandscape||''};
+  const generated=!Object.values(original).some(Boolean),fallback=generated?generatedCover(entry.name||raw,index):'';
+  const urls={...original,...(generated?{cover:fallback}:{})};
+  const images=Object.fromEntries(await Promise.all(Object.entries(urls).map(async([key,url])=>{
+    if(!url)return [key,''];if(!cache.has(url))cache.set(url,materializeCover(url));return [key,(await cache.get(url))||url];
   })));
-  return { ...images, hasOnlineCover: [entry.cover, entry.coverPortrait, entry.coverLandscape].some(value => /^(https?:\/\/|data:image\/(?!svg))/i.test(value || '')), networkCovers: Object.fromEntries(Object.entries(urls).map(([key, url]) => [key, /^https?:\/\//i.test(url) ? url : ''])) };
+  const CoverClassifier=require('./cover-classifier');
+  const cached=candidateCoverCache.cached(original.cover),dimensions=entry.coverDimensions||coverStore.dimensions(cached);
+  const orientation=CoverClassifier.classify(dimensions?.width,dimensions?.height)||(['portrait','landscape','square'].includes(entry.coverOrientation)?entry.coverOrientation:'')||(generated?'landscape':'');
+  let cover=images.cover||'',coverPortrait=images.coverPortrait||'',coverLandscape=images.coverLandscape||'';
+  if(cover&&['portrait','landscape'].includes(orientation)){
+    if(orientation==='portrait'&&!coverPortrait)coverPortrait=cover;
+    if(orientation==='landscape'&&!coverLandscape)coverLandscape=cover;
+    cover='';
+  }
+  const networkCovers={cover:/^https?:\/\//i.test(original.cover)?original.cover:'',coverPortrait:/^https?:\/\//i.test(original.coverPortrait)?original.coverPortrait:'',coverLandscape:/^https?:\/\//i.test(original.coverLandscape)?original.coverLandscape:''};
+  if(coverPortrait===images.cover&&networkCovers.cover)networkCovers.coverPortrait=networkCovers.cover;
+  if(coverLandscape===images.cover&&networkCovers.cover)networkCovers.coverLandscape=networkCovers.cover;
+  return {cover,coverPortrait,coverLandscape,...(orientation?{coverOrientation:orientation}:{}),...(typeof entry.coverShared==='boolean'?{coverShared:entry.coverShared}:{}),hasOnlineCover:Object.values(original).some(value=>/^(https?:\/\/|data:image\/(?!svg))/i.test(value||'')),networkCovers};
 }
 
-const MetadataNetwork = require('./metadata-network');
 async function fetchJson(url, timeoutMs = 10000, options = {}) {
   return MetadataRuntime.cached('json:'+url+':'+(options.body||''),()=>require('./steam-request-policy').run(url,()=>fetchJsonUncached(url,timeoutMs,options)),{accept:value=>value!==null&&!value?.errors&&!value?.error});
 }
@@ -268,6 +312,19 @@ async function fetchText(url, timeoutMs = 10000) {
   return MetadataRuntime.cached('text:'+url,()=>require('./steam-request-policy').run(url,()=>fetchTextUncached(url,timeoutMs),''),{accept:value=>Boolean(value)&&!/cf-chl-|Just a moment|机器人验证|访问异常/i.test(value)});
 }
 async function fetchTextUncached(url, timeoutMs = 10000) {
+  if(new URL(url).hostname.toLowerCase()==='zh.zlib.bz'){
+    let current=new URL(url),deadline=Date.now()+timeoutMs;
+    for(let redirects=0;redirects<=3;redirects++){
+      if(current.protocol!=='https:'||current.hostname.toLowerCase()!=='zh.zlib.bz'||current.username||current.password||current.port){MetadataNetwork.fail(403,'',url);return '';}
+      const remaining=deadline-Date.now();if(remaining<100)return '';
+      try{
+        const response=await fetch(current.href,{redirect:'manual',headers:{'User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) UnifiedManager/2.0',Accept:'text/html,*/*'},signal:MetadataRuntime.combine(AbortSignal.timeout(remaining),MetadataRuntime.signal())});
+        if(response.status>=300&&response.status<400){const location=response.headers.get('location');if(!location){MetadataNetwork.fail(response.status,'',url);return '';}const next=new URL(location,current);if(next.protocol!=='https:'||next.hostname.toLowerCase()!=='zh.zlib.bz'||next.username||next.password||next.port){MetadataNetwork.fail(403,'',url);return '';}current=next;continue;}
+        return await MetadataNetwork.readResponse(response,url,true);
+      }catch(error){MetadataRuntime.check();MetadataNetwork.transportFailure(error,url);return '';}
+    }
+    MetadataNetwork.fail(0,'',url);return '';
+  }
   if (/(?:^|\.)(?:playstation\.com|dlsite\.com|nintendo\.com|douban\.com|seedog\.cc)$/.test(new URL(url).hostname)) {
     try {const response=await net.fetch(url,{headers:{Accept:'text/html,*/*'},signal:MetadataRuntime.combine(AbortSignal.timeout(timeoutMs),MetadataRuntime.signal())});return await MetadataNetwork.readResponse(response,url,true);}catch(error) {MetadataRuntime.check();MetadataNetwork.transportFailure(error,url);return '';}
   }
@@ -279,6 +336,71 @@ async function fetchTextUncached(url, timeoutMs = 10000) {
     MetadataRuntime.check();const remaining=timeoutMs-(Date.now()-started);if(remaining<100)return '';
     try {const response=await net.fetch(url,{headers,signal:MetadataRuntime.combine(AbortSignal.timeout(remaining),MetadataRuntime.signal())});return await MetadataNetwork.readResponse(response,url,true);}catch{return '';}
   }
+}
+
+async function fetchMetadataJson(url, timeoutMs = 10000, options = {}, sourceId = '') {
+  url=metadataSourceLocations.rewrite(sourceId,url);
+  const key = 'metadata-json:'+url+':'+(options.method||'GET')+':'+(options.body||'')+':'+JSON.stringify(options.headers||{});
+  return MetadataRuntime.cached(key,()=>require('./steam-request-policy').run(url,()=>fetchMetadataJsonUncached(url,timeoutMs,options)),{accept:value=>value!==null&&!value?.errors&&!value?.error});
+}
+async function fetchMetadataJsonUncached(url, timeoutMs = 10000, options = {}) {
+  if (/(?:^|\.)(?:playstation\.com|egdata\.app|nintendo\.(?:com|jp)|nintendo-europe\.com|bgm\.tv|douban\.com|tvmaze\.com|jikan\.moe|openlibrary\.org|anilist\.co|itunes\.apple\.com|wikidata\.org|kitsu\.io|googleapis\.com)$/.test(new URL(url).hostname)) {
+    return require('./native-json').nativeJson((input,init={})=>getMetadataHttpSession().fetch(input,{...init,credentials:'include'}),url,timeoutMs,options);
+  }
+  const requestSignal=MetadataRuntime.combine(AbortSignal.timeout(Math.max(100,timeoutMs)),MetadataRuntime.signal(),options.signal);
+  try {
+    const response=await getMetadataHttpSession().fetch(url,{method:options.method||'GET',...(options.body!==undefined?{body:options.body}:{}),credentials:'include',headers:{Accept:'application/json,text/plain,*/*',...options.headers},signal:requestSignal});
+    return await MetadataNetwork.readResponse(response,url);
+  } catch(error) {
+    if(MetadataRuntime.signal()?.aborted)MetadataRuntime.check();
+    if(requestSignal.aborted){MetadataNetwork.transportFailure(requestSignal.reason||error,url);return null;}
+    MetadataNetwork.transportFailure(error,url);return null;
+  }
+}
+async function fetchMetadataText(url, timeoutMs = 10000, sourceId = '', diagnosticContext = null) {
+  url=metadataSourceLocations.rewrite(sourceId,url);
+  return MetadataRuntime.cached('metadata-text:'+url,()=>require('./steam-request-policy').run(url,()=>fetchMetadataTextUncached(url,timeoutMs,sourceId,diagnosticContext),''),{accept:value=>Boolean(value)&&!MetadataNetwork.isVerificationPage(value)});
+}
+async function fetchMetadataTextUncached(url, timeoutMs = 10000, sourceId = '', diagnosticContext = null) {
+  const parsed=new URL(url),headers={Accept:'text/html,*/*'};
+  const diagnostic=['onelib','zlibrary'].includes(sourceId)&&diagnosticContext?.log,log=(phase,fields={})=>{if(diagnostic)diagnosticContext.log({phase,operation:diagnosticContext.operation||'search',requestUrl:url,verified:Boolean(metadataSourceLocations.isVerified(sourceId)),...fields});};
+  const contentType=response=>String(response?.headers?.get?.('content-type')||'').split(';')[0].trim().slice(0,120);
+  const verification=(body,title='')=>{const verificationHit=MetadataNetwork.isVerificationPage(body);return {verificationHit,verificationReason:verificationHit?require('./metadata-book-diagnostics').verificationReason(body,title):''};};
+  const timeoutError=(error,signal)=>/timeout/i.test(String(error?.name||''))||/timeout/i.test(String(signal?.reason?.name||''))||/timed out/i.test(String(error?.message||''));
+  if(sourceId==='onelib'){
+    const requestSignal=MetadataRuntime.combine(AbortSignal.timeout(Math.max(100,timeoutMs)),MetadataRuntime.signal());
+    const requestStartedAt=Date.now();log('http.start',{requestMode:'electron-session-fetch',method:'GET',timeoutMs});
+    try{
+      const response=await getMetadataHttpSession().fetch(url,{credentials:'include',headers,signal:requestSignal});
+      const finalUrl=response.url||url;metadataSourceLocations.record(sourceId,parsed.hostname,finalUrl);
+      const observed={};const body=await MetadataNetwork.readResponse(response,url,true,value=>{Object.assign(observed,value);if(value.verificationHit)metadataSourceLocations.record(sourceId,parsed.hostname,value.finalUrl,{verified:false});});log('http.end',{status:response.status,durationMs:Date.now()-requestStartedAt,finalUrl:observed.finalUrl||finalUrl,contentType:contentType(response),bodyLength:observed.bodyLength??String(body||'').length,verificationHit:Boolean(observed.verificationHit),verificationReason:observed.verificationReason||''});return body;
+    }catch(error){const runtimeAborted=Boolean(MetadataRuntime.signal()?.aborted),actual=requestSignal.reason||error,isTimeout=timeoutError(actual,requestSignal),fields={durationMs:Date.now()-requestStartedAt,timeoutMs,errorName:actual?.name||error?.name||'Error',errorMessage:actual?.message||error?.message||''};log(isTimeout?'http.timeout':'http.error',{...fields,...(isTimeout?{timeoutLayer:'http'}:{})});if(runtimeAborted)MetadataRuntime.check();MetadataNetwork.transportFailure(actual,url);return '';}
+  }
+  if(sourceId==='zlibrary'){
+    // The parser has already constrained this request to its selected book
+    // source host. Honor that active host when automatically switching from a
+    // stale mirror; the Electron session still supplies the matching cookies.
+    const allowedOrigin=parsed.origin;
+    let current=parsed,deadline=Date.now()+Math.max(100,timeoutMs);
+    for(let redirects=0;redirects<=3;redirects++){
+      if(current.protocol!=='https:'||current.origin!==allowedOrigin||current.username||current.password||current.port){log('http.error',{durationMs:0,errorName:'UnsafeRedirectError',errorMessage:'请求地址超出书源允许范围'});MetadataNetwork.fail(403,'',url);return '';}
+      const remaining=deadline-Date.now();if(remaining<100){log('http.timeout',{durationMs:timeoutMs,timeoutMs,timeoutLayer:'http',errorName:'TimeoutError',errorMessage:'已超过书源请求时间限制'});return '';}
+      const requestSignal=MetadataRuntime.combine(AbortSignal.timeout(remaining),MetadataRuntime.signal()),requestStartedAt=Date.now();
+      try{
+        log('http.start',{requestMode:'electron-session-fetch-manual-redirect',method:'GET',timeoutMs:remaining,redirectIndex:redirects});
+        const response=await getMetadataHttpSession().fetch(current.href,{redirect:'manual',credentials:'include',headers,signal:requestSignal});
+        if(response.status>=300&&response.status<400){const location=response.headers.get('location');if(!location){log('http.end',{status:response.status,durationMs:Date.now()-requestStartedAt,finalUrl:current.href,contentType:contentType(response),bodyLength:0});MetadataNetwork.fail(response.status,'',url);return '';}const next=new URL(location,current);log('http.redirect',{redirectIndex:redirects+1,redirectFromUrl:current.href,redirectToUrl:next.href,status:response.status});log('http.end',{status:response.status,durationMs:Date.now()-requestStartedAt,finalUrl:current.href,contentType:contentType(response),bodyLength:0});if(next.protocol!=='https:'||next.origin!==allowedOrigin||next.username||next.password||next.port){log('http.error',{durationMs:0,errorName:'UnsafeRedirectError',errorMessage:'重定向地址超出书源允许范围'});MetadataNetwork.fail(403,'',url);return '';}current=next;continue;}
+        metadataSourceLocations.record(sourceId,parsed.hostname,current.href);
+        const observed={};const body=await MetadataNetwork.readResponse(response,url,true,value=>{Object.assign(observed,value);if(value.verificationHit)metadataSourceLocations.record(sourceId,parsed.hostname,value.finalUrl,{verified:false});});log('http.end',{status:response.status,durationMs:Date.now()-requestStartedAt,finalUrl:observed.finalUrl||current.href,contentType:contentType(response),bodyLength:observed.bodyLength??String(body||'').length,verificationHit:Boolean(observed.verificationHit),verificationReason:observed.verificationReason||''});return body;
+      }catch(error){const runtimeAborted=Boolean(MetadataRuntime.signal()?.aborted),actual=requestSignal.reason||error,isTimeout=timeoutError(actual,requestSignal),fields={durationMs:Date.now()-requestStartedAt,timeoutMs,errorName:actual?.name||error?.name||'Error',errorMessage:actual?.message||error?.message||''};log(isTimeout?'http.timeout':'http.error',{...fields,...(isTimeout?{timeoutLayer:'http'}:{})});if(runtimeAborted)MetadataRuntime.check();MetadataNetwork.transportFailure(actual,url);return '';}
+    }
+    MetadataNetwork.fail(0,'',url);log('http.error',{durationMs:timeoutMs,errorName:'RedirectLimitError',errorMessage:'重定向次数达到限制'});return '';
+  }
+  const requestSignal=MetadataRuntime.combine(AbortSignal.timeout(Math.max(100,timeoutMs)),MetadataRuntime.signal());
+  try{
+    const response=await getMetadataHttpSession().fetch(url,{credentials:'include',headers,signal:requestSignal});
+    return await MetadataNetwork.readResponse(response,url,true);
+  }catch(error){if(MetadataRuntime.signal()?.aborted)MetadataRuntime.check();MetadataNetwork.transportFailure(requestSignal.reason||error,url);return '';}
 }
 
 const STEAM_REVIEW_LABELS = {
@@ -298,8 +420,9 @@ async function steamReviewLabel(appid) { return (await steamReviewData(appid)).l
 async function steamPlaytime(appid) { return steamTime.hours(appid); }
 
 const steamGameCache = new Map();
+const steamAppDetailCache=new Map();
 let steamCacheRevision=0;
-const networkCache=require('./network-cache').create({session:()=>require('electron').session.defaultSession,metadata:MetadataRuntime,steam:{size:()=>Buffer.byteLength(JSON.stringify([...steamGameCache])),clear:()=>{steamCacheRevision++;steamGameCache.clear();}}});
+const networkCache=require('./network-cache').create({session:()=>require('electron').session.defaultSession,metadata:MetadataRuntime,steam:{size:()=>Buffer.byteLength(JSON.stringify([...steamGameCache]))+Buffer.byteLength(JSON.stringify([...steamAppDetailCache])),clear:()=>{steamCacheRevision++;steamGameCache.clear();steamAppDetailCache.clear();}}});
 async function mapConcurrent(values, limit, work) {
   const result = new Array(values.length); let cursor = 0;
   await Promise.all(Array.from({ length: Math.min(limit, values.length) }, async () => {
@@ -315,45 +438,29 @@ async function cachedSteamGame(appid) {
   if(steamGameCache.size>600)steamGameCache.delete(steamGameCache.keys().next().value);
   return result;
 }
-async function steamPagedSearch(query, country = 'cn') {
-  const found = [];
-  for (let start = 0; start < 200; start += 50) {
-    const page = await fetchJson('https://store.steampowered.com/search/results/?term=' + encodeURIComponent(query) +
-      '&category1=998&start=' + start + '&count=50&infinite=1&l=schinese&cc=' + country, 9000);
-    const html = page?.results_html || '';
-    const rows = [...html.matchAll(/<a\b[^>]*data-ds-appid="(\d+)"[^>]*>([\s\S]*?)<\/a>/g)];
-    const records=rows.map(match=>({id:match[1],name:MetadataText.text(match[2].match(/<span[^>]*class="title"[^>]*>([\s\S]*?)<\/span>/)?.[1]||'')}));
-    if (!rows.length) break;
-    found.push(...records);
-    if (start + 50 >= Number(page.total_count || 0)) break;
-  }
-  return found;
+async function steamPagedSearch(query, country = 'cn', start = 0) {
+  const page=await fetchJson('https://store.steampowered.com/search/results/?term='+encodeURIComponent(query)+'&category1=998&start='+Math.max(0,Number(start)||0)+'&count=50&infinite=1&l=schinese&cc='+country,9000);
+  const rows=[...(page?.results_html||'').matchAll(/<a\b[^>]*data-ds-appid="(\d+)"[^>]*>([\s\S]*?)<\/a>/g)];
+  return rows.map(match=>({id:match[1],name:MetadataText.text(match[2].match(/<span[^>]*class="title"[^>]*>([\s\S]*?)<\/span>/)?.[1]||''),tiny_image:match[2].match(/<img[^>]*src="([^"]+)"/i)?.[1]||''}));
 }
 async function steamSearch(query,emit=()=>{}) {
   const encoded = encodeURIComponent(query);
-  const [paged, community, suggested, store, international] = await Promise.all([
-    steamPagedSearch(query),
-    fetchJson('https://steamcommunity.com/actions/SearchApps/' + encoded, 7000),
-    steamSuggestSearch(query),
-    fetchJson('https://store.steampowered.com/api/storesearch/?term=' + encoded + '&l=schinese&cc=cn', 7000),
-    steamPagedSearch(query, 'us')
-  ]);
-  const list = [...(Array.isArray(community) ? community.map(item => ({ id: item.appid,name:item.name })) : []), ...suggested, ...(store?.items || []), ...paged, ...international];
-  const ids = [...new Set(list.map(item => String(item.id || item.appid || '')).filter(id => /^\d+$/.test(id)))].slice(0, 200);
-  const partial=[];
-  const results = await mapConcurrent(ids, 5, async id=>{
-    // These are online titles attached to this exact AppID, not the raw query.
-    // Keep original/localized names before appdetails replaces the display title.
-    const sourceNames=list.filter(item=>String(item.id||item.appid)===id).map(item=>MetadataText.text(item.name||'')).filter(Boolean);
-    const entries=(await cachedSteamGame(id)).map(entry=>({...entry,aliases:[...new Set([...(entry.aliases||[]),...sourceNames])]}));
-    if(/[a-z]{3}/i.test(query)&&entries.some(entry=>/[\u3400-\u9fff]/.test(entry.name)&&steamRelevance(entry,query)<=0)){
-      const payload=await fetchJson('https://store.steampowered.com/api/appdetails?appids='+encodeURIComponent(id)+'&l=english&cc=us',7000);
-      const original=payload?.[id]?.success&&payload[id].data?.type==='game'?MetadataText.text(payload[id].data.name||''):'';
-      if(original)for(const entry of entries){entry.originalName=original;entry.aliases=[...new Set([...entry.aliases,original])];}
-    }
-    partial.push(...entries);if(entries.length)emit(partial);return entries;
-  });
-  return results.flat();
+  const found=new Map(),publish=async records=>{
+    for(const row of records||[]){const id=String(row.id||row.appid||'');if(!/^\d+$/.test(id)||!row.name)continue;const name=MetadataText.text(row.name),old=found.get(id);found.set(id,old?{...row,...old,id,name:old.name||name,tiny_image:old.tiny_image||row.tiny_image||''}:{...row,id,name});}
+    const ordered=SteamSearchResults.preserveCandidateOrder([...found.values()]).map(row=>({id:row.id,steamAppId:row.id,name:row.name,aliases:row.aliases||[],cover:row.tiny_image||'',coverLandscape:row.tiny_image||'',coverPortrait:'https://cdn.akamai.steamstatic.com/steam/apps/'+encodeURIComponent(row.id)+'/library_600x900.jpg',type:'game',platforms:['steam'],storeUrl:'https://store.steampowered.com/app/'+encodeURIComponent(row.id)+'/',metadataSource:'Steam',ratingSource:'Steam'}));
+    if(ordered.length)emit(ordered);return ordered;
+  };
+  let ordered=await publish(await steamSuggestSearch(query));
+  if(ordered.length)return ordered;
+  const store=await fetchJson('https://store.steampowered.com/api/storesearch/?term='+encoded+'&l=schinese&cc=cn',7000);
+  ordered=await publish(store?.items||[]);
+  if(ordered.length)return ordered;
+  const community=await fetchJson('https://steamcommunity.com/actions/SearchApps/'+encoded,7000);
+  ordered=await publish(Array.isArray(community)?community.map(item=>({id:item.appid,name:item.name})):[]);
+  if(ordered.length)return ordered;
+  ordered=await publish(await steamPagedSearch(query));
+  if(!ordered.length)ordered=await publish(await steamPagedSearch(query,'cn',50));
+  return ordered;
 }
 
 function decodeSteamHtml(value) { return String(value || '').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;|&#x27;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>'); }
@@ -365,11 +472,25 @@ async function steamSuggestSearch(query) {
   return list;
 }
 
-async function steamByAppId(appid) {
-  let details = await fetchJson(`https://store.steampowered.com/api/appdetails?appids=${encodeURIComponent(appid)}&l=schinese&cc=cn`, 7000);
-  if (!details?.[appid]?.success) details = await fetchJson(`https://store.steampowered.com/api/appdetails?appids=${encodeURIComponent(appid)}&l=schinese&cc=us`, 7000);
-  const detail = details?.[appid]?.success ? details[appid].data : null;
-  if (!detail || detail.type !== 'game' || /\b(dlc|demo|soundtrack|season pass|expansion pass|mod organizer|resolution pack|benchmark)\b|扩充通票|原声带|试玩版/i.test(detail.name || '')) return [];
+async function steamAppDetailsBatch(appids) {
+  const ids=[...new Set((appids||[]).map(value=>String(value||'')).filter(value=>/^\d+$/.test(value)))],result=new Map(),missing=[];
+  for(const id of ids){const cached=steamAppDetailCache.get(id);if(cached&&cached.expires>Date.now())result.set(id,structuredClone(cached.detail));else{steamAppDetailCache.delete(id);missing.push(id);}}
+  const remember=(id,detail)=>{steamAppDetailCache.set(id,{detail:structuredClone(detail),expires:Date.now()+300000});while(steamAppDetailCache.size>900)steamAppDetailCache.delete(steamAppDetailCache.keys().next().value);result.set(id,detail);};
+  for(let offset=0;offset<missing.length;offset+=40){
+    const batch=missing.slice(offset,offset+40),url=(values,country)=>`https://store.steampowered.com/api/appdetails?appids=${values.join(',')}&l=schinese&cc=${country}`;
+    let response=await fetchJson(url(batch,'cn'),9000)||{};
+    const retry=batch.filter(id=>!response?.[id]?.success);
+    if(retry.length){const fallback=await fetchJson(url(retry,'us'),9000);if(fallback)response={...response,...fallback};}
+    for(const id of batch)if(response?.[id]?.success&&response[id].data&&typeof response[id].data==='object')remember(id,response[id].data);
+  }
+  return result;
+}
+async function steamAppDetails(appid) {
+  return (await steamAppDetailsBatch([appid])).get(String(appid))||null;
+}
+async function steamByAppId(appid,knownDetail=null) {
+  const detail = knownDetail || await steamAppDetails(appid);
+  if (!detail || String(detail.type||'').toLowerCase() !== 'game' || /\b(demo|soundtrack|season pass|expansion pass|mod organizer|resolution pack|benchmark)\b|扩充通票|原声带|试玩版/i.test(detail.name || '')) return [];
   const [review,hours] = await Promise.all([steamReviewData(appid),steamPlaytime(appid)]); const reviewLabel = review.label;
   return [{
     id: appid, steamAppId:String(appid), platforms:['steam'],
@@ -384,7 +505,7 @@ async function steamByAppId(appid) {
     steamRating: reviewLabel,
     externalRating: reviewLabel,
     ratingSource: review.ratingSource, ratingValue: review.ratingValue, ratingMax: review.ratingMax,
-    fieldSources: { externalRating:'Steam' },
+    fieldSources: { name:'Steam',description:'Steam',developer:'Steam',publisher:'Steam',releaseDate:'Steam',genres:'Steam',cover:'Steam',coverPortrait:'Steam',coverLandscape:'Steam',externalRating:'Steam',storeUrl:'Steam',platforms:'Steam',steamAppId:'Steam' },
     playtime: hours,steamPlaytime:hours,playtimeSource:hours===null?'':'Steam',
     metadataSource: 'Steam',
     storeUrl: `https://store.steampowered.com/app/${appid}/`,
@@ -456,14 +577,15 @@ async function metadataSearchSteam(type, query, emit=()=>{}) {
     if (type === 'game') {
       const appid = raw.match(/^appid:(\d+)$/i)?.[1];
       if (appid) {
-        results = await steamByAppId(appid);
+        results=[{id:appid,steamAppId:appid,name:'Steam AppID '+appid,coverPortrait:'https://cdn.akamai.steamstatic.com/steam/apps/'+encodeURIComponent(appid)+'/library_600x900.jpg',platforms:['steam'],storeUrl:'https://store.steampowered.com/app/'+appid+'/',metadataSource:'Steam',ratingSource:'Steam'}];
+        emit(results);
       } else {
-        const terms = gameSearchTerms(raw);
-        const partial=new Map();const publish=entries=>{for(const entry of entries)if(steamRelevance(entry,raw)>0)partial.set(String(entry.id),entry);emit([...partial.values()]);};
-        const responses = await mapConcurrent(terms, 2, term => steamSearch(term,publish).catch(error => {MetadataRuntime.check();return [];}));
-        const unique = new Map();
-        responses.flat().forEach((entry) => { if (entry?.id && !unique.has(String(entry.id))) unique.set(String(entry.id), entry); });
-        results = Array.from(unique.values()).filter(entry => steamRelevance(entry, raw) > 0).sort((a, b) => steamRelevance(b, raw) - steamRelevance(a, raw)).slice(0, 200);
+        const terms=gameSearchTerms(raw),partial=new Map(),publish=entries=>{for(const entry of entries||[]){const id=String(entry?.id||entry?.steamAppId||'');if(/^\d+$/.test(id)&&entry?.name&&!partial.has(id))partial.set(id,{...entry,id});}emit([...partial.values()]);};
+        for(const term of terms.slice(0,3)){
+          const batch=await steamSearch(term,publish).catch(error=>{MetadataRuntime.check();return [];});
+          publish(batch);results=[...partial.values()].slice(0,40);
+          if(results.length)break;
+        }
       }
     }
     if (!results.length) return [];
@@ -477,17 +599,43 @@ async function metadataSearch(type,query){return (await metadataSearchSources(ty
 async function metadataSearchSources(type,query,options={}) {
   MetadataRuntime.check();query=String(query||'').trim().slice(0,240);
   if(!query)return {integrated:[],sources:[],loading:false};
-  if(type==='game'&&/^appid:\d+$/i.test(query)){const items=await metadataSearchSteam(type,query);return {integrated:items,sources:[{id:'steam',label:'Steam',items,state:items.length?'ok':'empty'}],loading:false};}
+  if(type==='game'&&/^appid:\d+$/i.test(query)){
+    const context={runId:randomUUID(),sourceId:'steam',mediaType:'game',operation:'search',query,queryLength:query.length},started=Date.now();metadataDiagnosticLog.write({...context,phase:'source.start',verified:false});
+     try{const items=await metadataSearchSteam(type,query),bundle={integrated:items,sources:[{id:'steam',label:'Steam',items,state:items.length?'ok':'empty'}],loading:false};options.onProgress?.(bundle);metadataDiagnosticLog.write({...context,phase:items.length?'source.success':'source.empty',status:items.length?'ok':'empty',durationMs:Date.now()-started,requestCount:1,resultCount:items.length,verified:false});return bundle;}
+    catch(error){metadataDiagnosticLog.write({...context,phase:'source.failed',status:'failed',durationMs:Date.now()-started,requestCount:1,resultCount:0,errorName:error?.name||'Error',errorMessage:error?.message||''});throw error;}
+  }
   return type==='game'?gameSources.search(query,options):sourceSearch.search(type,query,options);
 }
 async function prepareMetadataCandidate(candidate) {
   if(!candidate||typeof candidate!=='object')return null;
   return {...MetadataText.candidate(candidate),...await materializeCandidateCovers(candidate)};
 }
+async function resolveMetadataCandidate(candidate) {
+  if(!candidate||typeof candidate!=='object')return null;
+  if(candidate._sourceId==='steam'||candidate.sourceId==='steam'||/Steam/i.test(candidate.metadataSource||'')&&/^\d+$/.test(String(candidate.steamAppId||candidate.id||''))){
+    const id=String(candidate.steamAppId||candidate.id||'');if(!/^\d+$/.test(id))return candidate;
+    const context={runId:randomUUID(),sourceId:'steam',mediaType:'game',operation:'resolve',query:candidate.name||'',queryLength:String(candidate.name||'').length},started=Date.now();metadataDiagnosticLog.write({...context,phase:'source.start',verified:false});
+    const outcome=await SteamCandidateResolution.resolveOrKeep(candidate,async()=>{
+      const storeDetail=await steamAppDetails(id);if(!storeDetail||String(storeDetail.type||'').toLowerCase()!=='game')return null;
+      const detail=(await steamByAppId(id,storeDetail))[0];if(!detail)return null;
+      return {...candidate,...detail,id,steamAppId:id,platforms:['steam'],metadataSource:candidate.integrated?(candidate.metadataSource||'Steam'):'Steam',fieldSources:{...(candidate.fieldSources||{}),...(detail.fieldSources||{})}};
+    });
+    const phase=outcome.detailed?'source.success':outcome.error?'source.failed':'source.empty';
+    metadataDiagnosticLog.write({...context,phase,status:outcome.detailed?'ok':outcome.error?'partial':'details-unavailable',durationMs:Date.now()-started,requestCount:1,resultCount:1,verified:false,errorName:outcome.error?.name||'',errorMessage:outcome.error?.message||''});
+    let resolved=outcome.value;
+    if(candidate.integrated&&Array.isArray(candidate._matchedCandidates)&&candidate._matchedCandidates.length){
+      const merged=await SteamCandidateResolution.resolveOrKeep(resolved,()=>gameSources.resolveCandidate?.(resolved));
+      resolved=merged.value;
+    }
+    return resolved;
+  }
+  if(candidate.mediaType==='game'||candidate.type==='game')return await gameSources.resolveCandidate?.(candidate)||candidate;
+  return await sourceSearch.resolveCandidate(candidate)||candidate;
+}
 
 // Legacy bridge uses the same read-only pipeline; no separate EXE-first scanner.
 async function scanLocalGames(paths) {
-  const result=await require('./local-scanner').scan((paths||[]).filter(p=>typeof p==='string'&&path.isAbsolute(p)).slice(0,80),'game',{existingItems:loadLibrary().items,online:false,rules:require('./scan-rules').read(app.getPath('userData'))});
+  const result=await require('./local-scanner').scan((paths||[]).filter(p=>typeof p==='string'&&path.isAbsolute(p)).slice(0,80),'game',{existingItems:loadLibrary().items,requireGameExe:Boolean(loadSettings().scanGamesRequireExe),rules:require('./scan-rules').read(app.getPath('userData'))});
   return [...result.items,...result.pending];
 }
 
@@ -495,10 +643,11 @@ async function refreshItemMetadata(item) {
   if(!['game','movie','anime','manga','book'].includes(item.type||'game'))return item;
   const candidates=await metadataSearch(item.type||'game',item.type==='game'&&/^\d+$/.test(String(item.steamAppId||''))?'appid:'+item.steamAppId:item.name||'');
   const candidate=refreshMatch(item,candidates);if(!candidate)return item;
-  const next=require('./local-model').fillMissing(item,candidate);for(const key of ['steamRating','externalRating','steamPositivePercent','ratingSource','ratingValue','ratingMax'])if(candidate[key]!==undefined&&candidate[key]!==null&&candidate[key]!=='')next[key]=candidate[key];
+  const detail=await resolveMetadataCandidate(candidate);if(!detail)return item;
+  const next=require('./local-model').fillMissing(item,detail);for(const key of ['steamRating','externalRating','steamPositivePercent','ratingSource','ratingValue','ratingMax'])if(detail[key]!==undefined&&detail[key]!==null&&detail[key]!=='')next[key]=detail[key];
   const changed=Object.keys(next).filter(key=>JSON.stringify(next[key])!==JSON.stringify(item[key]));
   if(!changed.length)return item;next.fieldSources={...item.fieldSources};
-  for(const key of changed)next.fieldSources[key]=candidate.fieldSources?.[key]||candidate.metadataSource||'';
+  for(const key of changed)next.fieldSources[key]=detail.fieldSources?.[key]||detail.metadataSource||'';
   next.autoMetadataAt=new Date().toISOString();return normaliseItem(next);
 }
 
@@ -1162,7 +1311,7 @@ function registerIpc() {
  const pauseOthers=kind=>{for(const win of BrowserWindow.getAllWindows())if(!win.isDestroyed())win.webContents.send('media:pause',kind);};
  ipcMain.on('audio:playing',()=>pauseOthers('video'));
  ipcMain.on('reader:playing',event=>{pauseOthers('audio');for(const win of BrowserWindow.getAllWindows())if(!win.isDestroyed()&&win.webContents.id!==event.sender.id)win.webContents.send('media:pause','video');});
-  const localServices=require('./local-services').createLocalServices({ipcMain,protocol,dialog,windowFor:event=>BrowserWindow.fromWebContents(event.sender)||mainWindow,loadLibrary,dataRoot:()=>app.getPath('userData'),metadataSearch:require('./import-metadata').createImportSearch({steam:query=>metadataSearchSteam('game',query),search:metadataSearchSources}),prepareCandidate:prepareMetadataCandidate,metadataRuntime:MetadataRuntime,shell});localServices.install();
+  const localServices=require('./local-services').createLocalServices({ipcMain,protocol,dialog,windowFor:event=>BrowserWindow.fromWebContents(event.sender)||mainWindow,loadLibrary,dataRoot:()=>app.getPath('userData'),metadataSearch:require('./import-metadata').createImportSearch({search:metadataSearchSources}),prepareCandidate:prepareMetadataCandidate,resolveCandidate:resolveMetadataCandidate,metadataRuntime:MetadataRuntime,shell});localServices.install();
   unifiedPlayer=require('./player/dist/service').createPlayerService({electron:require('electron'),ipcMain:rawIpcMain,loadLibrary,localServices,audioLyrics:()=>audioService?.lyrics,audioPlayback:()=>audioService?.resolvePlayer,appearance:()=>loadSettings().appearance,dataRoot:()=>app.getPath('userData'),disguised:()=>loadSettings().disguiseEnabled,quickEscape:()=>quickDisguise.escape(),usage,snapshotLibrary:playerSnapshotLibrary});
   readerWindows=require('./reader-windows').createReaderWindows({BrowserWindow,ipcMain,loadLibrary,loadSettings,localServices,player:unifiedPlayer,usage});
   audioDisplay={hide(){},close(){}};ipcMain.handle('audio:windowOpen',()=>unifiedPlayer.show());
@@ -1181,6 +1330,7 @@ function registerIpc() {
   });
   ipcMain.handle('cache:size',()=>networkCache.size());
   ipcMain.handle('cache:clear',()=>networkCache.clear());
+  ipcMain.handle('metadataDiagnostics:open',async()=>{try{const folder=metadataDiagnosticLog.directory();fs.mkdirSync(folder,{recursive:true});const error=await shell.openPath(folder);return {ok:!error,message:error||''};}catch(error){return {ok:false,message:error?.message||'无法打开日志文件夹'};}});
   ipcMain.handle('settings:load', () => secretSettings().publicSettings(loadSettings(),true));
   ipcMain.handle('settings:save', (_, settings) => {
     const safe = { ...initialSettings, ...secretSettings().resolve(settings||{},loadSettings()), updatedAt:new Date().toISOString(), appearance: { ...initialSettings.appearance, ...(settings?.appearance || {}) } };
@@ -1190,7 +1340,38 @@ function registerIpc() {
   });
   ipcMain.handle('metadata:libraryCover',(event,urls)=>candidateCoverCache.resolve(urls,{owner:'library:'+event.sender.id,id:'library-covers'}));
   ipcMain.handle('metadata:prepareCandidate',(_,candidate)=>prepareMetadataCandidate(candidate));
-  ipcMain.handle('metadata:previewCover',(event,urls,id)=>candidateCoverCache.resolve(urls,{owner:event.sender.id,id:typeof id==='string'?id.slice(0,100):'preview'}));
+  ipcMain.handle('metadata:integrate',(_,type,primarySource,sources,query='')=>{
+    if(!['game','movie','anime','manga','book'].includes(type)||!Array.isArray(sources))throw Error('无效的整合来源');
+    const primary=String(primarySource||''),integrated=require('./metadata-merge').mergeMetadata(sources,type,primary),score=type==='game'?candidate=>require('./game-sources').score(candidate,gameSearchTerms(query)):candidate=>require('./metadata-enrichment').relevance(candidate,query);
+    return integrated.sort((a,b)=>score(b)-score(a)||Number(b._sourceId===primary)-Number(a._sourceId===primary));
+  });
+  ipcMain.handle('metadata:resolveCandidate',async(event,id,candidate)=>{
+    if(typeof id!=='string'||id.length>120||!candidate||typeof candidate!=='object')throw Error('无效的元数据候选');
+    try{return await MetadataRuntime.run(event.sender.id,id,()=>resolveMetadataCandidate(candidate),false,true);}
+    catch(error){if(error.name==='AbortError')return {canceled:true};throw error;}
+  });
+  ipcMain.handle('metadata:openVerification',async(event,host,type,query,sourceId='',startUrl='')=>{
+    const safeHost=require('./metadata-verification-window').hostName(host),safeQuery=String(query||'').trim().slice(0,240);
+    if(!safeHost||!['game','movie','anime','manga','book','other'].includes(type)||!safeQuery)throw Error('无效的来源验证请求');
+    const safeSourceId=/^[a-z][a-z0-9_-]{0,39}$/.test(String(sourceId||''))?String(sourceId):'';
+    const parent=BrowserWindow.fromWebContents(event.sender);if(!parent||parent.isDestroyed())throw Error('主窗口已关闭');
+    const effectiveStartUrl=startUrl||'';
+    const safeStartUrl=effectiveStartUrl?require('./metadata-verification-window').safeNavigation(effectiveStartUrl):'';
+    if(startUrl&&(!safeStartUrl||new URL(safeStartUrl).hostname.toLowerCase()!==safeHost))throw Error('来源搜索地址无效');
+    if(!startUrl&&effectiveStartUrl&&(!safeStartUrl||new URL(safeStartUrl).hostname.toLowerCase()!==safeHost))throw Error('来源搜索地址无效');
+    metadataDiagnosticLog.write({sourceId:safeSourceId||'unknown',mediaType:type,operation:'verification',queryLength:safeQuery.length,phase:'verification.window-open',requestHost:safeHost});
+    const result=await metadataVerificationWindow.open(safeHost,parent,safeStartUrl||undefined);
+    if(event.sender.isDestroyed()||parent.isDestroyed())return {canceled:true};
+    const verified=Boolean(result?.verified&&!result?.verificationHit);
+    if(verified&&result?.html)metadataVerificationWindow.cacheRenderedDom(safeStartUrl||require('./metadata-verification-window').verificationUrl(safeHost),{...result,verified});
+    if(safeSourceId&&result?.finalUrl)metadataSourceLocations.record(safeSourceId,safeHost,result.finalUrl,{verified});
+    metadataDiagnosticLog.write({sourceId:safeSourceId||'unknown',mediaType:type,operation:'verification',queryLength:safeQuery.length,phase:'verification.window-close',requestHost:safeHost,finalUrl:result?.finalUrl||'',pageTitle:require('./metadata-book-diagnostics').safeTitle(result?.title||'',safeQuery),loadCompleted:Boolean(result?.loadCompleted),verificationHit:Boolean(result?.verificationHit),verificationReason:result?.verificationReason||'',verified,frameDocumentCount:Number(result?.frameDocumentCount)||0,anchorCount:Number(result?.anchorCount)||0,bookLinkCount:Number(result?.bookLinkCount)||0,shadowRootCount:Number(result?.shadowRootCount)||0});
+    if(!verified)return {verificationRequired:true,verificationHost:safeHost,verificationReason:result?.verificationReason||(!result?.loadCompleted?'page-not-loaded':'challenge-still-present')};
+    const id='verification-'+randomUUID(),owner='verification-'+event.sender.id;
+    try{return await MetadataRuntime.run(owner,id,()=>metadataSearchSources(type,safeQuery),true,true);}
+    catch(error){if(error.name==='AbortError')return {canceled:true};throw error;}
+  });
+  ipcMain.handle('metadata:previewCover',(event,urls,id)=>candidateCoverCache.resolveDetailed(urls,{owner:event.sender.id,id:typeof id==='string'?id.slice(0,100):'preview'}));
   ipcMain.handle('metadata:start',async(event,id,type,query)=>{
     if(typeof id!=='string'||id.length>100||!['game','movie','anime','manga','book','other'].includes(type))throw Error('无效的检索请求');
     const owner=event.sender.id;candidateCoverCache.cancel(owner);
@@ -1287,6 +1468,7 @@ function registerIpc() {
     const settings=loadSettings(),connections=audioService?.exportConnections?.()||[];
     const library=coverStore.exportLibrary({...require('./library-relations').fields(state,normaliseItem),schemaVersion:4,items:(state?.items||[]).map(normaliseItem),categories:state?.categories||[]});
     const backup=localSyncState(library,settings);
+    backup.settings.appearance=structuredClone(settings.appearance||initialSettings.appearance);
     backup.backupSecrets={settings:Object.fromEntries(require('./secure-settings').KEYS.map(key=>[key,settings[key]||''])),audioPasswords:Object.fromEntries(connections.filter(row=>row?.id&&row.password).map(row=>[row.id,row.password]))};
     fs.writeFileSync(result.filePath, JSON.stringify(coverStore.exportLibrary(backup), null, 2), 'utf8');
     return true;
@@ -1309,7 +1491,7 @@ function registerIpc() {
       const normalized={...require('./library-relations').fields(library,normaliseItem),schemaVersion:4,items:library.items.map(normaliseItem),categories:library.categories||initialState.categories};
       const savedLineage=canonical?parsed.lineage:null;
       let syncLineage=null;if(savedLineage?.schemaVersion===2&&/^[a-f0-9]{64}$/i.test(savedLineage.endpointKey||'')){const state=require('./webdav-state'),baseState=state.toBaseState(savedLineage.baseState);if(state.syncRevision(baseState)===savedLineage.baseRevision)syncLineage={schemaVersion:2,endpointKey:savedLineage.endpointKey,baseRevision:savedLineage.baseRevision,baseState};}
-      let settingsBackup=full?structuredClone(parsed.settings):null;if(canonical&&backupSecrets.settings)settingsBackup={...settingsBackup,...backupSecrets.settings};
+      let settingsBackup=full?structuredClone(parsed.settings):null;if(canonical&&backupSecrets.settings)settingsBackup={...settingsBackup,...backupSecrets.settings};if(settingsBackup)settingsBackup.appearance={...initialSettings.appearance,...(loadSettings().appearance||{}),...(settingsBackup.appearance||{})};
       const importSettings=canonical||legacyFull&&parsed.backupVersion===2?require('./webdav-state').restoreDeviceSettings(settingsBackup,loadSettings(),syncDeviceId(),devicePathSettings):full?settingsBackup:null;
       const token=require('node:crypto').randomUUID();pendingBackupImports.set(event.sender.id,{token,expires:Date.now()+300000,full,library:normalized,settings:importSettings,audioConnections:importedConnections,syncLineage});
       return {token,includesSettings:full,itemCount:normalized.items.length};
@@ -1339,6 +1521,7 @@ if (!app.requestSingleInstanceLock()) {
 } else {
   app.on('second-instance', () => BrowserWindow.getAllWindows()[0]?.focus());
   app.whenReady().then(() => {
+    getMetadataHttpSession();
     protocol.handle('um-cover', request => {
       const file = coverStore.fileFor(request.url);
       return file && fs.existsSync(file) ? net.fetch(pathToFileURL(file).toString()) : new Response('Not found', { status: 404 });

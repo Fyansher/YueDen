@@ -24,7 +24,7 @@ function closeLocalImport(){
 }
 async function openLocalImport(type,droppedPaths=[]){
  if(localImportSession||!['game','movie','anime','manga','book'].includes(type))return;
- const choices=scanChoices(type),job={type,roots:[...localRoots(type)],excluded:new Set((choices.uncheckedRoots||[]).map(LocalModel.pathKey)),uncheckedRows:new Set(choices.uncheckedRows||[]),rows:[],online:settings.scanOnline!==false,liveMetadata:settings.scanLiveMetadata!==false,includeAttachments:false,closed:false,busy:false,ignoreAll:false};localImportSession=job;
+ const choices=scanChoices(type),job={type,roots:[...localRoots(type)],excluded:new Set((choices.uncheckedRoots||[]).map(LocalModel.pathKey)),uncheckedRows:new Set(choices.uncheckedRows||[]),rows:[],liveMetadata:settings.scanLiveMetadata!==false,requireGameExe:settings.scanGamesRequireExe===true,includeAttachments:false,closed:false,busy:false,ignoreAll:false};localImportSession=job;
  const backdrop=createImportDialog({id:'localImportBackdrop',title:'导入'+(TYPE_NAMES[type]||'资源'),description:type==='game'?'选择游戏集合目录，每个直接子文件夹生成一项；内部程序为备选入口。':'勾选目录后检查文件；确认导入才写入资源库。',body:"<div class=\"local-root-tools\"><button type=\"button\" class=\"secondary-button\" id=\"localAddRoot\">＋ 添加文件夹</button><button type=\"button\" class=\"secondary-button\" id=\"localAddFiles\">＋ 添加文件</button><button type=\"button\" class=\"add-button\" id=\"localScan\">检查文件</button></div><div id=\"localRootList\"></div><p id=\"localScanStatus\" role=\"status\"></p><div id=\"localScanWarnings\"></div><div id=\"localImportRows\"></div>",closeId:'localImportClose',summaryId:'localImportSummary',stopId:'localImportStop',commitId:'localCommit'});
  if(type!=='game'){const group=document.createElement('button');group.className='secondary-button';group.textContent='组合勾选项';group.onclick=()=>importGroupDialog(job.rows,(chosen,name)=>{const head=chosen[0],files=LocalModel.mergeFiles([],chosen.flatMap(r=>r.localFiles));job.rows=job.rows.filter(r=>!chosen.includes(r)||r===head);head.name=name;head.localFiles=files;head.metadataInvalidated=true;delete head.metadataBundle;delete head.resolvedMetadata;delete head.metadataPrepared;renderLocalRows(job);});$('localScan').after(group);}$('localImportClose').onclick=closeLocalImport;$('localImportStop').onclick=closeLocalImport;backdrop.oncontextmenu=e=>{if(e.target===backdrop){e.preventDefault();closeLocalImport();}};
 
@@ -47,27 +47,28 @@ async function openLocalImport(type,droppedPaths=[]){
   await queueSettingsSave({localResourceRoots:{...settings.localResourceRoots,[type]:job.roots}});await rememberScanChoices(job);showRoots();
  }catch(e){showToast(e.message,'error');}};
  installScanOptions(job);
- importMetadataControls(job,$('localRootList'),{query:row=>native.localMetadata('preview-'+row.id,row.type,row.name),apply:(row,bundle)=>{row.metadataBundle=bundle;row.metadataChecked=true;row.metadataInvalidated=false;},render:()=>{if(!job.closed)renderLocalRows(job);}});
+  importMetadataControls(job,$('localRootList'),{query:(row,onProgress)=>native.localMetadata('preview-'+row.id,row.type,row.name,onProgress),apply:(row,bundle,{partial}={})=>{row.metadataBundle=bundle;row.metadataChecked=!partial;row.metadataInvalidated=false;if(!partial&&row.imported)void completeImportedMetadata(job,row,bundle);},render:()=>{if(!job.closed)renderLocalRows(job);}});
  job.unlisten=native.onLocalProgress?.(info=>{if(!job.closed){if(info.rows){job.rows=ImportMetadataQueue.reconcile(job.rows,info.rows.map(row=>localPreviewRow(row,job)));renderLocalRows(job,true);}else if(info.row){const old=job.rows.find(r=>r.id===info.row.id);if(old)ImportMetadataQueue.reconcile([old],[localPreviewRow(info.row,job)]);else job.rows.push(localPreviewRow(info.row,job));renderLocalRows(job,true);}if((info.rows||info.row)&&!job.metadataQueue.paused)void job.metadataQueue.resume();$('localScanStatus').textContent=(info.phase||'扫描')+' · 已检查 '+info.checked+' 个文件，识别到 '+info.found+' 个候选资源';}});
  const busy=value=>{
   if(job.closed)return;job.busy=value;
   for(const row of job.rows)document.querySelector('[data-local-row="'+row.id+'"]')?.querySelectorAll('input,select,button').forEach(el=>el.disabled=value||row.imported);
   document.querySelectorAll('#localImportRows>.local-root-tools button').forEach(el=>el.disabled=value);
-  $('scanOnline').disabled=value;$('scanLiveMetadata').disabled=value;$('localAddRoot').disabled=value;$('localAddFiles').disabled=value;$('localScan').disabled=value;$('localCommit').disabled=value||!job.rows.some(r=>r.selected&&!r.imported);showRoots();
+   if($('scanLiveMetadata'))$('scanLiveMetadata').disabled=value;if($('scanGamesRequireExe'))$('scanGamesRequireExe').disabled=value;$('localAddRoot').disabled=value;$('localAddFiles').disabled=value;$('localScan').disabled=value;$('localCommit').disabled=value||!job.rows.some(r=>r.selected&&!r.imported);showRoots();
  };
  $('localScan').onclick=async()=>{
   const roots=job.roots.filter(v=>!job.excluded.has(LocalModel.pathKey(v)));if(!roots.length){showToast('请先勾选要扫描的文件夹');return;}
   busy(true);$('localCommit').textContent='导入所选资源';$('localScanStatus').textContent='正在检查目录，不会执行程序或修改文件…';
   try{
-   await job.metadataQueue.pause();if(job.closed)return;job.rows=[];void job.metadataQueue.resume();renderLocalRows(job);const result=await native.previewLocal(roots,type,{online:false,liveMetadata:false});if(job.closed)return;
+   await job.metadataQueue.pause();if(job.closed)return;job.rows=[];void job.metadataQueue.resume();renderLocalRows(job);const result=await native.previewLocal(roots,type,{requireGameExe:job.requireGameExe});if(job.closed)return;
    job.scanResult=result;job.rows=ImportMetadataQueue.reconcile(job.rows,ScanManualGroups.partition(result.items,state.items).filter((row,i,arr)=>arr.findIndex(r=>r.id===row.id)===i).map(row=>localPreviewRow(row,job)));$('localScanWarnings').textContent=(result.warnings||[]).join('\n');
    const hiddenCount=(result.candidates||[]).filter(r=>!result.items.some(i=>i.id===r.id)).length;const ignored=result.ignored||{},notes=[hiddenCount?'其他类型或证据不足 '+hiddenCount+' 项':'',ignored.wallpaperDirectories?'壁纸目录 '+ignored.wallpaperDirectories:'',ignored.auxiliaryFiles?'说明文档 '+ignored.auxiliaryFiles:'',ignored.nonPageImages?'非书页图片 '+ignored.nonPageImages:''].filter(Boolean);
    $('localScanStatus').textContent='检查完成：'+result.checked+' 个文件，分组为 '+job.rows.length+' 个资源'+(notes.length?' · 已跳过 '+notes.join('、'):'');renderLocalRows(job);renderScanSummary(job,result);if(!job.metadataQueue.paused)void job.metadataQueue.resume();
-  }catch(error){if(!job.closed)$('localScanStatus').textContent=error.message;}finally{busy(false);}
+ }catch(error){if(!job.closed)$('localScanStatus').textContent=error.message;}finally{busy(false);}
  };
+ job.refreshScan=()=>{if(!job.closed&&!job.busy&&job.roots.some(v=>!job.excluded.has(LocalModel.pathKey(v))))$('localScan').click();};
  $('localAddFiles').onclick=async()=>{busy(true);try{const result=await native.pickImportFiles(type);if(job.closed||!result)return;const added=result.items.filter(source=>!job.rows.some(r=>r.id===source.id&&r.imported)).map(source=>{const row=localPreviewRow(source,job);if(row.classification?.type==='unknown_application'&&type==='game'){row.type='game';row.confirmed=true;for(const k of ['type','name','localPath'])rememberRowOverride(row,k,row[k]);}row.selected=!row.existingId;row.explicitFile=true;return row;});for(const row of added){const index=job.rows.findIndex(old=>old.id===row.id);if(index<0)job.rows.push(row);else job.rows[index]=row;}renderLocalRows(job);busy(false);void job.metadataQueue.resume();if(added.some(r=>r.type!==type)){showToast('所选文件含其他类型，请核对资源库后导入');return;}showToast('已添加 '+added.length+' 个候选，请点击“导入所选资源”');}catch(e){if(!job.closed)showToast(e.message,'error');}finally{busy(false);}};
  $('localCommit').onclick=()=>commitLocalRows(job,busy);showRoots();
- if(droppedPaths.length){busy(true);try{const result=await native.previewDropped(droppedPaths,type);if(job.closed)return;job.rows=result.items.map(row=>localPreviewRow(row,job));renderLocalRows(job);$('localScanWarnings').textContent=(result.warnings||[]).join('；');if(!job.metadataQueue.paused)void job.metadataQueue.resume();$('localScanStatus').textContent=job.rows.length?'拖入检查完成，请核对并确认导入':'未找到当前资源库支持的文件';}catch(error){if(!job.closed)$('localScanStatus').textContent=error.message;}finally{busy(false);}}
+ if(droppedPaths.length){busy(true);try{const result=await native.previewDropped(droppedPaths,type,{requireGameExe:job.requireGameExe});if(job.closed)return;job.rows=result.items.map(row=>localPreviewRow(row,job));renderLocalRows(job);$('localScanWarnings').textContent=(result.warnings||[]).join('；');if(!job.metadataQueue.paused)void job.metadataQueue.resume();$('localScanStatus').textContent=job.rows.length?'拖入检查完成，请核对并确认导入':'未找到当前资源库支持的文件';}catch(error){if(!job.closed)$('localScanStatus').textContent=error.message;}finally{busy(false);}}
 }
 function localPreviewRow(row,job=localImportSession){
  row={...row,detectedType:row.detectedType||row.type,type:row.scanInfo?.userOverrides?.type||job?.type||row.type};const matched=state.items.filter(item=>LocalModel.same(item,row)),existing=matched[0];const possible=existing?null:state.items.find(item=>ResourceIdentity.compare(item,row).status==='review');
@@ -136,15 +137,17 @@ function prefetchLocalMetadata(job,rows){
   while(cursor<rows.length){
    const i=cursor++,row=rows[i],current=state.items.find(v=>v.id===row.itemId);
    if(job.closed||!current){finish[i]({skipped:true});continue;}
-   if(row.metadataApplied){finish[i]({prepared:true});continue;}
-   if(row.resolvedMetadata){finish[i]({bundle:{integrated:[row.resolvedMetadata],sources:[]}});continue;}
-   if(row.metadataBundle){finish[i]({bundle:row.metadataBundle});continue;}
-   if((ImportSessionModel.state(row)==='checked'||job.scanResult?.metadataPhaseCompleted)&&!row.metadataInvalidated){finish[i]({error:Error('扫描阶段未取得可用资料，已保留本地条目；需要时可点击刷新')});continue;}
-   if(job.metadataPaused||!(job.online||job.liveMetadata)||!['game','movie','anime','manga','book'].includes(row.type)){finish[i]({offline:true});continue;}
+    if(row.metadataApplied){finish[i]({prepared:true});continue;}
+    if(row.enrichmentState==='loading'){finish[i]({pendingMetadata:true});continue;}
+    if(row.resolvedMetadata){finish[i]({bundle:{integrated:[row.resolvedMetadata],sources:[]}});continue;}
+    if(row.metadataBundle){finish[i]({bundle:row.metadataBundle});continue;}
+    if(row.metadataError){finish[i]({error:Error(row.metadataError)});continue;}
+    if(row.enrichmentState==='loading'||job.liveMetadata&&job.metadataQueue?.running&&!job.metadataQueue.paused){finish[i]({pendingMetadata:true});continue;}
+    if(job.metadataPaused||!job.liveMetadata||!['game','movie','anime','manga','book'].includes(row.type)){finish[i]({offline:true});continue;}
 
    if(!row.metadataInvalidated&&completeLocalMetadata(current)){finish[i]({complete:true});continue;}
    localRowMessage(job,row,'正在联网识别 '+row.name+'…','searching');
-   try{const bundle=await ImportSessionModel.once(row,()=>native.localMetadata('import-'+row.id,row.type,!row.metadataInvalidated&&row.identifiers?.steam?'appid:'+row.identifiers.steam:row.name));finish[i]({bundle});}
+    try{const bundle=await ImportSessionModel.once(row,()=>native.localMetadata('import-'+row.id,row.type,!row.metadataInvalidated&&row.identifiers?.steam?'appid:'+row.identifiers.steam:row.name,value=>{row.metadataBundle=value;renderLocalRows(job);}));finish[i]({bundle});}
    catch(error){finish[i]({error});}
   }
  }
@@ -155,8 +158,9 @@ async function commitLocalRows(job,busy,selection=job.rows){
  if(job.busy||job.closed)return;const rows=selection.filter(r=>r.selected&&!r.imported&&r.action!=='keep');
  if(rows.some(r=>!r.name.trim()||!r.action)){showToast('请填写名称并确认有差异资源的处理方式','error');return;}
  
- if(!rows.length){showToast('没有选中需要导入的资源');return;}
- job.committing=true;busy(true);try{await job.metadataQueue?.pause();}catch(error){job.committing=false;busy(false);showToast('无法停止元数据请求：'+error.message,'error');return;}if(job.closed)return;job.metadataStopped=true;job.ignoreAll=false;localImportProgress(job,0,rows.length);rows.forEach(row=>localRowMessage(job,row,'正在导入名称与本地路径…','queued'));let next=structuredClone(state),created=0,merged=0,automatic=0,chosen=0,ignored=0,missing=0;
+  if(!rows.length){showToast('没有选中需要导入的资源');return;}
+  for(const row of rows)row.metadataPendingAfterImport=Boolean(job.liveMetadata&&!row.metadataApplied);
+ job.committing=true;busy(true);job.ignoreAll=false;localImportProgress(job,0,rows.length);rows.forEach(row=>localRowMessage(job,row,'正在导入名称与本地路径…','queued'));let next=structuredClone(state),created=0,merged=0,automatic=0,chosen=0,ignored=0,missing=0,localCommitSaved=false;
  for(const row of rows){
   let current=row.action==='new'&&row.existingId?null:next.items.find(i=>i.id===row.existingId&&i.type===row.type&&(['merge','version','replace'].includes(row.action)||LocalModel.same(i,row)))||next.items.find(i=>LocalModel.same(i,row));
   const incoming=structuredClone(row.localFiles),embedded={developer:row.metadata?.author||row.metadata?.companyName||'',publisher:row.metadata?.publisher||'',isbn:row.metadata?.isbn||'',releaseDate:row.metadata?.releaseDate||'',...(row.type==='manga'&&row.metadata?.pages?{pages:row.metadata.pages}:{}),...(row.type==='game'&&row.identifiers?.steam?{steamAppId:row.identifiers.steam}:{})};
@@ -167,38 +171,69 @@ async function commitLocalRows(job,busy,selection=job.rows){
   if(row.action==='consolidate')for(const id of row.matchedIds||[]){if(id!==row.itemId&&next.items.some(i=>i.id===id&&i.type===row.type)){next=LibraryRelations.merge(next,row.itemId,id);merged++;}}
  }
  try{
-  await saveLocalLibrary(next);rows.forEach(r=>{r.imported=true;r.importedThisSession=true;r.selected=false;r.message=r.metadataApplied?'已导入已获取的资料':'已导入名称与路径，正在处理候选';});renderLocalRows(job);renderLibrary();if(job.closed)return;
-  $('localScanStatus').textContent='已新增 '+created+' 个，合并 '+merged+' 个。正在应用扫描结果；不确定的候选将逐项弹出。';
-  const pending=prefetchLocalMetadata(job,rows);
+  await saveLocalLibrary(next);localCommitSaved=true;rows.forEach(r=>{r.imported=true;r.importedThisSession=true;r.selected=false;r.message=r.metadataApplied?'已导入已获取的资料':'已导入名称与路径，正在处理候选';});renderLocalRows(job);renderLibrary();if(job.closed)return;
+   $('localScanStatus').textContent='已新增 '+created+' 个，合并 '+merged+' 个。已有资料立即应用，慢来源返回后继续补全。';
+   const pending=prefetchLocalMetadata(job,rows);
   for(let i=0;i<rows.length;i++){
    const row=rows[i],result=await pending[i];if(job.closed)break;
    localImportProgress(job,i,rows.length);
-   if(result.prepared){automatic++;localRowMessage(job,row,'✓ 已导入扫描阶段准备好的资料，无需再次获取','success');localImportProgress(job,i+1,rows.length);continue;}
-   if(result.offline){localRowMessage(job,row,'✓ 已导入 · 保留本地证据，未发送联网查询','success');localImportProgress(job,i+1,rows.length);continue;}
-   if(result.complete){localRowMessage(job,row,'✓ 已导入 · 已有完整元数据，本地路径已补全','success');localImportProgress(job,i+1,rows.length);continue;}
+    if(result.prepared){automatic++;row.metadataPendingAfterImport=false;localRowMessage(job,row,'✓ 已导入扫描阶段准备好的资料','success');localImportProgress(job,i+1,rows.length);continue;}
+    if(result.pendingMetadata){localRowMessage(job,row,'✓ 已导入 · 来源仍在查询，取得结果后继续补全','searching');localImportProgress(job,i+1,rows.length);continue;}
+    if(result.offline){row.metadataPendingAfterImport=false;localRowMessage(job,row,'✓ 已导入 · 保留本地证据，未发送联网查询','success');localImportProgress(job,i+1,rows.length);continue;}
+    if(result.complete){row.metadataPendingAfterImport=false;localRowMessage(job,row,'✓ 已导入 · 已有完整元数据，本地路径已补全','success');localImportProgress(job,i+1,rows.length);continue;}
    if(result.skipped)continue;
-   if(result.error){missing++;localRowMessage(job,row,'已导入 · 联网未完成，已保留名称与路径：'+result.error.message,'partial');localImportProgress(job,i+1,rows.length);continue;}
-   const bundle=result.bundle||{},first=row.resolvedMetadata||LocalModel.automaticCandidate(row.name,row.type,bundle);
+    if(result.error){row.metadataPendingAfterImport=false;missing++;localRowMessage(job,row,'已导入 · 获取元数据未完成，已保留名称与路径：'+result.error.message,'partial');localImportProgress(job,i+1,rows.length);continue;}
+   const bundle=result.bundle||{},first=row.resolvedMetadata||LocalModel.automaticCandidate(row.name,row.type,bundle),hasCandidates=(bundle.integrated||[]).length||(bundle.sources||[]).some(s=>s.items?.length);
    try{
-    if(first){await applyLocalMetadata(job,row,first);automatic++;localRowMessage(job,row,'✓ 已导入并自动补全元数据 · '+(first.metadataSource||'整合源'),'success');}
-    else if((bundle.integrated||[]).length||(bundle.sources||[]).some(s=>s.items?.length)){
+    if(first){
+     try{await applyLocalMetadata(job,row,first);row.metadataApplied=true;row.metadataPendingAfterImport=false;automatic++;localRowMessage(job,row,'✓ 已导入并自动补全元数据 · '+(first.metadataSource||'整合源'),'success');}
+     catch(error){
+      if(!hasCandidates)throw error;
+      localRowMessage(job,row,'自动刮削未完成，请确认候选：'+error.message,'choosing');
+      const selected=job.ignoreAll?null:await pickImportMetadata(job,row,bundle);if(job.closed)break;
+       if(selected){await applyLocalMetadata(job,row,selected);row.metadataApplied=true;row.metadataPendingAfterImport=false;chosen++;localRowMessage(job,row,'✓ 已导入并使用所选元数据 · '+(selected.metadataSource||'整合源'),'success');}
+       else{row.metadataPendingAfterImport=false;ignored++;localRowMessage(job,row,'已导入 · 已忽略元数据选择，保留名称与路径','skipped');}
+     }
+    }
+    else if(hasCandidates){
      localRowMessage(job,row,'匹配待确认：请在搜索结果窗口选择，或忽略保留名称与路径','choosing');
      const selected=job.ignoreAll?null:await pickImportMetadata(job,row,bundle);if(job.closed)break;
-     if(selected){await applyLocalMetadata(job,row,selected);chosen++;localRowMessage(job,row,'✓ 已导入并使用所选元数据 · '+(selected.metadataSource||'整合源'),'success');}
-     else{ignored++;localRowMessage(job,row,'已导入 · 已忽略元数据选择，保留名称与路径','skipped');}
-    }else{missing++;localRowMessage(job,row,'已导入 · 未找到元数据，已保留名称与路径，可稍后刷新','partial');}
-   }catch(error){missing++;localRowMessage(job,row,'已导入 · 元数据填入未完成：'+error.message,'partial');}
+      if(selected){await applyLocalMetadata(job,row,selected);row.metadataApplied=true;row.metadataPendingAfterImport=false;chosen++;localRowMessage(job,row,'✓ 已导入并使用所选元数据 · '+(selected.metadataSource||'整合源'),'success');}
+      else{row.metadataPendingAfterImport=false;ignored++;localRowMessage(job,row,'已导入 · 已忽略元数据选择，保留名称与路径','skipped');}
+    }else{row.metadataPendingAfterImport=false;missing++;localRowMessage(job,row,'已导入 · 未找到元数据，已保留名称与路径，可稍后刷新','partial');}
+   }catch(error){row.metadataPendingAfterImport=false;missing++;localRowMessage(job,row,'已导入 · 元数据填入未完成：'+error.message,'partial');}
    localImportProgress(job,i+1,rows.length);
   }
   if(!job.closed){$('localImportSummary').textContent='导入完成 · 新增 '+created+' / 合并 '+merged;$('localCommit').textContent='导入已完成';$('localScanStatus').textContent='自动匹配 '+automatic+' · 手动选择 '+chosen+' · 已忽略 '+ignored+' · 未取得 '+missing+'。本次结果保留展开；重复导入不会增加相同条目。';}
   if(!job.closed){localImportProgress(job,rows.length,rows.length,true);showToast('导入完成：新增 '+created+'，合并 '+merged+'；元数据补全 '+(automatic+chosen)+(missing?'，'+missing+' 项待补全':'')+(ignored?'，忽略 '+ignored+' 项':''));}
- }catch(error){if(!job.closed){rows.filter(row=>!row.imported).forEach(row=>localRowMessage(job,row,'导入失败：'+error.message,'error'));$('localImportProgress')?.remove();}showToast('导入失败：'+error.message,'error');}finally{job.committing=false;busy(false);}
+ }catch(error){if(!job.closed){if(localCommitSaved)for(const row of rows){row.imported=true;row.importedThisSession=true;row.selected=false;}for(const row of rows)localRowMessage(job,row,(localCommitSaved?'本地条目已保存，后续处理失败：':'本地条目保存失败：')+error.message,localCommitSaved?'partial':'error');$('localImportProgress')?.remove();}showToast((localCommitSaved?'本地条目已保存，但后续处理失败：':'本地条目保存失败：')+error.message,'error');}finally{job.committing=false;busy(false);void finishPendingImportedMetadata(job);}
 }
 async function applyLocalMetadata(job,row,candidate){
- const request=row.metadataRequest=(row.metadataRequest||0)+1;const prepared=job.metadataStopped||row.metadataPrepared&&candidate===row.resolvedMetadata?candidate:await native.prepareLocalCandidate(candidate);if(job.closed||request!==row.metadataRequest||!prepared)return;
- const live=state.items.find(i=>i.id===row.itemId);if(!live)return;const incoming={...prepared,type:row.type,localFiles:live.localFiles},duplicate=state.items.find(i=>i.id!==live.id&&LocalModel.same(i,incoming));
+ const request=row.metadataRequest=(row.metadataRequest||0)+1;let prepared=candidate;
+ if(native.resolveLocalMetadataCandidate){const id='local-candidate-'+Date.now()+'-'+Math.random().toString(36).slice(2,7),resolved=await native.resolveLocalMetadataCandidate(id,candidate);if(resolved?.canceled)throw Object.assign(new Error('元数据详情解析已取消'),{name:'AbortError'});if(resolved)prepared=resolved;}
+ if(native.prepareLocalCandidate){prepared=await native.prepareLocalCandidate(prepared)||prepared;}
+ if(job.closed)throw Object.assign(new Error('导入窗口已关闭，元数据未写入'),{name:'AbortError'});
+ if(request!==row.metadataRequest)throw Object.assign(new Error('较新的元数据请求已接管本次结果'),{name:'AbortError'});
+ if(!prepared)throw Error('来源没有返回可写入的元数据');
+ const live=state.items.find(i=>i.id===row.itemId);if(!live)throw Error('导入条目已不存在，元数据未写入');const incoming={...prepared,type:row.type,localFiles:live.localFiles},duplicate=state.items.find(i=>i.id!==live.id&&LocalModel.same(i,incoming));
  let updated=LocalModel.fillMissing(live,prepared);if(row.newItem&&live.name===row.name&&!live.scanInfo?.userOverrides?.name){updated.name=prepared.name||live.name;if(updated.scanInfo)updated.scanInfo={...updated.scanInfo,automatic:{...updated.scanInfo.automatic,name:updated.name}};}
- if(duplicate&&!(row.action==='new'&&row.existingId)){await saveLocalLibrary(LibraryRelations.merge({...state,items:state.items.map(i=>i.id===live.id?updated:i)},duplicate.id,live.id));row.itemId=duplicate.id;}
- else await saveLocalLibrary({...state,items:state.items.map(i=>i.id===live.id?updated:i)});
- renderLibrary();
+  if(duplicate&&!(row.action==='new'&&row.existingId)){await saveLocalLibrary(LibraryRelations.merge({...state,items:state.items.map(i=>i.id===live.id?updated:i)},duplicate.id,live.id));row.itemId=duplicate.id;}
+  else await saveLocalLibrary({...state,items:state.items.map(i=>i.id===live.id?updated:i)});
+  renderLibrary();
+ return true;
 }
+async function completeImportedMetadata(job,row,bundle){
+ if(job.closed||!row.imported||!row.metadataPendingAfterImport)return;
+ if(job.committing){job.pendingImportedMetadata??=new Map();job.pendingImportedMetadata.set(row.id,{row,bundle});return;}
+ if(row.metadataFinishing)return;row.metadataFinishing=true;
+ try{
+  const first=row.resolvedMetadata||LocalModel.automaticCandidate(row.name,row.type,bundle),hasCandidates=(bundle.integrated||[]).length||(bundle.sources||[]).some(source=>source.items?.length);
+  if(first){
+   try{await applyLocalMetadata(job,row,first);row.metadataApplied=true;row.metadataPendingAfterImport=false;localRowMessage(job,row,'✓ 已导入并自动补全元数据 · '+(first.metadataSource||'整合源'),'success');}
+   catch(error){if(!hasCandidates)throw error;localRowMessage(job,row,'自动刮削未完成，请确认候选：'+error.message,'choosing');const selected=job.ignoreAll?null:await pickImportMetadata(job,row,bundle);if(job.closed)return;if(selected){await applyLocalMetadata(job,row,selected);row.metadataApplied=true;row.metadataPendingAfterImport=false;localRowMessage(job,row,'✓ 已导入并使用所选元数据 · '+(selected.metadataSource||'整合源'),'success');}else{row.metadataPendingAfterImport=false;localRowMessage(job,row,'已导入 · 已忽略元数据选择，保留名称与路径','skipped');}}
+  }else if(hasCandidates){localRowMessage(job,row,'匹配待确认：请选择元数据候选','choosing');const selected=job.ignoreAll?null:await pickImportMetadata(job,row,bundle);if(job.closed)return;if(selected){await applyLocalMetadata(job,row,selected);row.metadataApplied=true;row.metadataPendingAfterImport=false;localRowMessage(job,row,'✓ 已导入并使用所选元数据 · '+(selected.metadataSource||'整合源'),'success');}else{row.metadataPendingAfterImport=false;localRowMessage(job,row,'已导入 · 已忽略元数据选择，保留名称与路径','skipped');}}
+  else{row.metadataPendingAfterImport=false;localRowMessage(job,row,'已导入 · 未找到元数据，已保留名称与路径，可稍后刷新','partial');}
+ }catch(error){row.metadataPendingAfterImport=false;localRowMessage(job,row,'已导入 · 元数据填入未完成：'+error.message,'partial');}
+ finally{row.metadataFinishing=false;if(!job.closed)renderLocalRows(job);}
+}
+async function finishPendingImportedMetadata(job){const pending=[...(job.pendingImportedMetadata?.values()||[])];job.pendingImportedMetadata?.clear();for(const {row,bundle} of pending)await completeImportedMetadata(job,row,bundle);}

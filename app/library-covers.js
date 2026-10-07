@@ -1,11 +1,24 @@
 /* A failed remote request cannot replace a saved cover with generated artwork. */
 const libraryCoverMemory=new Map(),libraryCoverRequests=new Map();
+const transientCoverOwners=new WeakMap();let nextTransientCoverOwner=0;
 function coverUrls(item,orientation='landscape'){
  const preferred=orientation==='portrait'?'coverPortrait':'coverLandscape';
- return [...new Set([item[preferred],item.cover,item.coverPortrait,item.coverLandscape,item.networkCovers?.[preferred],item.networkCovers?.cover,...Object.values(item.networkCovers||{})].filter(Boolean))];
+ const actual=typeof CoverClassifier!=='undefined'?CoverClassifier.orientation(item):item.coverOrientation||'';
+ const shared=item.coverShared===true,commonAllowed=shared||!actual||actual==='square'||actual===orientation;
+ const legacyFallback=!shared&&!actual;
+ return [...new Set([item[preferred],commonAllowed?item.cover:'',item.networkCovers?.[preferred],commonAllowed?item.networkCovers?.cover:'',...(legacyFallback?[item.coverPortrait,item.coverLandscape,item.networkCovers?.coverPortrait,item.networkCovers?.coverLandscape]:[])].filter(Boolean))];
 }
-function coverSignature(item,orientation='landscape'){return JSON.stringify(coverUrls(item,orientation));}
-function stableCoverFor(item,orientation='landscape'){return libraryCoverMemory.get(coverSignature(item,orientation))||coverFor(item,orientation);}
+function coverOwner(item,image){
+ const id=String(item?.id||'').trim();if(id)return 'resource:'+id;
+ if(item&&typeof item==='object'){if(!transientCoverOwners.has(item))transientCoverOwners.set(item,'transient:'+ ++nextTransientCoverOwner);return transientCoverOwners.get(item);}
+ if(image){if(!image._coverOwner)image._coverOwner='transient:'+ ++nextTransientCoverOwner;return image._coverOwner;}
+ return '';
+}
+function coverSignature(item,orientation='landscape',urls=coverUrls(item,orientation),image=null){
+ const owner=coverOwner(item,image);return owner&&urls.length?JSON.stringify({owner,orientation,urls}):'';
+}
+function coverSignatureUrls(signature){try{const value=JSON.parse(signature);return Array.isArray(value?.urls)?value.urls:Array.isArray(value)?value:[];}catch{return[];}}
+function stableCoverFor(item,orientation='landscape'){const signature=coverSignature(item,orientation);return (signature&&libraryCoverMemory.get(signature))||coverFor(item,orientation);}
 function coverOrientation(image,item){
  if(image.dataset.coverDirection)return image.dataset.coverDirection;
  if(image.closest('.portrait-layout,#portraitCoverSample'))return 'portrait';
@@ -13,12 +26,12 @@ function coverOrientation(image,item){
 }
 function attachStableCover(image,item,index=0){
  image._coverCleanup?.();
- const orientation=coverOrientation(image,item),urls=coverUrls(item,orientation),signature=JSON.stringify(urls),tried=new Set([image.getAttribute('src')]);let alive=true,attempt=0,recovery=null;
- const remember=src=>{libraryCoverMemory.set(signature,src);while(libraryCoverMemory.size>1800)libraryCoverMemory.delete(libraryCoverMemory.keys().next().value);};
+ const orientation=coverOrientation(image,item),urls=coverUrls(item,orientation),signature=coverSignature(item,orientation,urls,image),tried=new Set([image.getAttribute('src')]);let alive=true,attempt=0,recovery=null;
+ const remember=src=>{if(!signature||image.dataset.coverFallback==='true')return;libraryCoverMemory.set(signature,src);while(libraryCoverMemory.size>1800)libraryCoverMemory.delete(libraryCoverMemory.keys().next().value);};
  const valid=()=>alive&&image.isConnected;
  const recover=()=>{
   if(recovery)return recovery;
-  if(!native.resolveLibraryCover)return Promise.resolve('');
+  if(!signature||!urls.length||!native.resolveLibraryCover)return Promise.resolve('');
   if(!libraryCoverRequests.has(signature)){
    const task=Promise.resolve().then(()=>native.resolveLibraryCover(urls)).catch(()=>'');
    libraryCoverRequests.set(signature,task);task.finally(()=>libraryCoverRequests.delete(signature));
@@ -34,7 +47,7 @@ function attachStableCover(image,item,index=0){
  const failed=async()=>{
   if(!alive||image.dataset.coverFallback==='true')return;
   const token=++attempt;image.classList.add('cover-recovering');
-  const cached=libraryCoverMemory.get(signature),alternate=[cached,...urls].find(url=>url&&!tried.has(url));
+  const cached=signature&&libraryCoverMemory.get(signature),alternate=[cached,...urls].find(url=>url&&!tried.has(url));
   if(alternate){tried.add(alternate);image.src=alternate;void recover();return;}
   const ref=await recover();if(!valid()||token!==attempt)return;
   if(ref&&!tried.has(ref)){tried.add(ref);image.src=ref;return;}

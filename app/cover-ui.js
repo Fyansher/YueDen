@@ -1,43 +1,67 @@
 const COVER_KEYS = ['cover', 'coverPortrait', 'coverLandscape'];
 let editorCovers = {}, coverDraft = null, coverDialogVersion = 0;
 let coverDirection = 'landscape';
+let editorCoverDirection = 'landscape';
 const isNetworkCover = value => /^https?:\/\//i.test(value || '');
 const isLocalCover = value => /^(um-cover:|data:image\/)/i.test(value || '');
 function currentLibraryLayout() {
   const saved = settings.appearance?.libraryLayouts?.[activeView];
   return ['small', 'cards', 'portrait', 'list'].includes(saved) ? saved : ['book', 'manga'].includes(activeView) ? 'portrait' : 'cards';
 }
+function coverDirectionForLayout(item, layout = currentLibraryLayout()) {
+  // Only the portrait layout has a portrait-shaped frame. Cards, small cards,
+  // and compact rows all render a wide frame regardless of resource type.
+  return layout === 'portrait' ? 'portrait' : 'landscape';
+}
 function setLibraryLayout(value) {
   if (!['small', 'cards', 'portrait', 'list'].includes(value)) return;
   queueSettingsSave({ appearance: { libraryLayouts: { ...settings.appearance?.libraryLayouts, [activeView]: value } } }); renderLibrary();
 }
 function coverFor(item, orientation = 'landscape') {
-  return orientation === 'portrait' ? (item.coverPortrait || item.cover || item.coverLandscape || '') : (item.coverLandscape || item.cover || item.coverPortrait || '');
+  if(item.coverShared===true&&item.cover)return item.cover;
+  const preferred=orientation==='portrait'?'coverPortrait':'coverLandscape',opposite=orientation==='portrait'?'coverLandscape':'coverPortrait';
+  if(item[preferred])return item[preferred];
+  const actual=typeof CoverClassifier!=='undefined'?CoverClassifier.orientation(item):'';
+  if(item.cover&&(!actual||actual==='square'||actual===orientation))return item.cover;
+  if(actual&&item[opposite])return item[opposite];
+  if(item.cover)return item.cover;
+  if(actual)return '';
+  // Older library entries often only have one directional field. Keep their
+  // historic fallback until the user explicitly records an image direction.
+  return item[opposite]||item.cover||'';
 }
 function fillCoverFields(item) {
-  editorCovers = { ...Object.fromEntries(COVER_KEYS.map(key => [key, item[key] || ''])), customCovers: [...(item.customCovers || [])], networkCovers: { ...item.networkCovers } };
+  editorCoverDirection = coverDirectionForLayout(item);
+  editorCovers = { ...Object.fromEntries(COVER_KEYS.map(key => [key, item[key] || ''])), ...(item.coverOrientation?{coverOrientation:item.coverOrientation}:{}),coverShared:item.coverShared===true,customCovers: [...(item.customCovers || [])], networkCovers: { ...item.networkCovers } };
   for (const key of COVER_KEYS) if (isNetworkCover(item[key])) editorCovers.networkCovers[key] = item[key];
   closeCoverDialog();
 }
-function getEditorCovers() { return structuredClone(editorCovers); }
+function getEditorCovers() { return { ...structuredClone(editorCovers), coverShared:editorCovers.coverShared===true,coverDisplayDirection: editorCoverDirection }; }
 function applyCoverCandidate(candidate) {
+  const orientation=typeof CoverClassifier!=='undefined'?CoverClassifier.orientation(candidate):'';
+  const values={cover:candidate.cover||'',coverPortrait:candidate.coverPortrait||'',coverLandscape:candidate.coverLandscape||''};
+  if(values.cover&&['portrait','landscape'].includes(orientation)){
+    const key=orientation==='portrait'?'coverPortrait':'coverLandscape';values[key]=values[key]||values.cover;values.cover='';
+  }
   for (const key of COVER_KEYS) {
-    const value = candidate[key] || candidate.cover || candidate.coverPortrait || candidate.coverLandscape || '';
+    const value = values[key] || '';
     if (!value) continue;
     const sourceUrl = candidate.networkCovers?.[key] || (isNetworkCover(value) ? value : '');
     if (sourceUrl) editorCovers.networkCovers[key] = sourceUrl;
     if (!editorCovers.customCovers.includes(key)) editorCovers[key] = value;
   }
-  updateCoverPreview(coverFor(editorCovers, ['book', 'manga'].includes($('fieldType').value) ? 'portrait' : 'landscape'));
+  if(orientation)editorCovers.coverOrientation=orientation;
+  updateCoverPreview(coverFor(editorCovers, editorCoverDirection), editorCoverDirection);
 }
 function selectedCoverKey() { return coverDirection === 'portrait' ? 'coverPortrait' : 'coverLandscape'; }
-function coverTargetKeys() { return $('coverShared').checked ? COVER_KEYS : [selectedCoverKey()]; }
+function coverTargetKeys() { return $('coverShared').checked ? ['cover'] : [selectedCoverKey()]; }
 function setDraftCover(value, networkUrl = '', custom = true) {
   for (const key of coverTargetKeys()) {
     coverDraft[key] = value; if (networkUrl) coverDraft.networkCovers[key] = networkUrl;
     coverDraft.customCovers = coverDraft.customCovers.filter(entry => entry !== key);
     if (custom && value) coverDraft.customCovers.push(key);
   }
+  coverDraft.coverShared=$('coverShared').checked;
 }
 function closeCoverDialog() { ++coverDialogVersion; coverDraft = null; $('coverBackdrop')?.classList.add('hidden'); }
 function invalidateCoverRefresh() { ++coverDialogVersion; $('coverRefreshResults')?.replaceChildren(); }
@@ -58,7 +82,7 @@ function renderCoverDialog() {
   }
 }
 function openCoverDialog() {
-  coverDraft = getEditorCovers(); ++coverDialogVersion; coverDirection = ['book', 'manga'].includes($('fieldType').value) ? 'portrait' : 'landscape'; $('coverShared').checked = false;
+  coverDraft = getEditorCovers(); ++coverDialogVersion; coverDirection = editorCoverDirection; $('coverShared').checked = coverDraft.coverShared===true;
   $('coverRefreshResults').replaceChildren();
   renderCoverDialog(); $('coverBackdrop').classList.remove('hidden'); $('coverDialogClose').focus(); updateEditorSaveCue(false);
 }
@@ -70,6 +94,10 @@ function installCoverControls() {
   const backdrop = document.createElement('div'); backdrop.id = 'coverBackdrop'; backdrop.className = 'modal-backdrop hidden';
   backdrop.innerHTML = '<section class="cover-dialog" role="dialog" aria-modal="true" aria-labelledby="coverDialogTitle"><div class="modal-header"><h2 id="coverDialogTitle">调整封面</h2><button type="button" class="modal-close" id="coverDialogClose" aria-label="关闭封面设置">×</button></div><div class="cover-dialog-body"><div class="cover-samples"><button type="button" class="cover-direction" data-cover-direction="portrait" aria-pressed="false"><span id="portraitCoverSample" class="cover-sample book-sample"></span><span>竖向封面</span></button><button type="button" class="cover-direction" data-cover-direction="landscape" aria-pressed="false"><span id="landscapeCoverSample" class="cover-sample film-sample"></span><span>横向封面</span></button></div><label class="check-label cover-shared-label"><input id="coverShared" type="checkbox">横竖共用当前选中的封面</label><label class="field">网络图片 URL<input id="coverUrl" type="url" placeholder="https://…" maxlength="4096"></label><div class="cover-source-actions"><button type="button" class="secondary-button" id="useNetworkCover">使用网络图片</button><button type="button" class="secondary-button" id="pickCoverBtn">选择本地图片</button><button type="button" class="text-button" id="cancelLocalCover">取消本地图片</button><button type="button" class="secondary-button" id="refreshCoverBtn">↻ 重新获取图片</button></div><div id="coverRefreshResults" class="cover-refresh-results"></div><p id="coverSourceStatus" class="cover-source-status"></p></div><div class="modal-footer"><button type="button" class="secondary-button" id="coverDialogCancel">取消</button><button type="button" class="add-button" id="coverDialogApply">应用</button></div></section>';
   document.body.appendChild(backdrop);
+  $('fieldType').addEventListener('change', () => {
+    editorCoverDirection = coverDirectionForLayout({ type: $('fieldType').value });
+    updateCoverPreview(coverFor(editorCovers, editorCoverDirection), editorCoverDirection);
+  });
   document.querySelectorAll('[data-cover-direction]').forEach(button => button.addEventListener('click', () => {
     if ($('coverUrl').dataset.changed === 'true') { $('useNetworkCover').click(); if ($('coverUrl').dataset.changed === 'true') return; }
     coverDirection = button.dataset.coverDirection; ++coverDialogVersion; $('coverRefreshResults').replaceChildren(); renderCoverDialog();
@@ -80,6 +108,10 @@ function installCoverControls() {
     if ($('coverShared').checked) {
       const key = selectedCoverKey(), src = coverFor(coverDraft, coverDirection);
       setDraftCover(src, coverDraft.networkCovers[key] || (isNetworkCover(src) ? src : ''), coverDraft.customCovers.includes(key) || isLocalCover(src));
+    } else {
+      const key=selectedCoverKey(),shared=coverDraft.cover||'';
+      if(shared){coverDraft[key]=shared;if(coverDraft.networkCovers.cover)coverDraft.networkCovers[key]=coverDraft.networkCovers.cover;if(coverDraft.customCovers.includes('cover')&&!coverDraft.customCovers.includes(key))coverDraft.customCovers.push(key);}
+      coverDraft.cover='';coverDraft.networkCovers.cover='';coverDraft.customCovers=coverDraft.customCovers.filter(value=>value!=='cover');coverDraft.coverShared=false;
     }
     renderCoverDialog();
   });
@@ -98,6 +130,7 @@ function installCoverControls() {
       if (!coverDraft || version !== coverDialogVersion || !result || result.canceled) return;
       if (!result.ok || !result.reference) throw Error(result.message || '图片无法读取');
       for (const key of keys) { if (isNetworkCover(coverDraft[key])) coverDraft.networkCovers[key] = coverDraft[key]; coverDraft[key] = result.reference; if (!coverDraft.customCovers.includes(key)) coverDraft.customCovers.push(key); }
+      coverDraft.coverShared=$('coverShared').checked;
       renderCoverDialog();
     } catch (error) { showToast(error.message, 'error'); }
     finally { $('pickCoverBtn').disabled = false; }
@@ -107,17 +140,19 @@ function installCoverControls() {
     if (url && !isNetworkCover(url)) { showToast('请输入 http 或 https 图片链接', 'error'); return; }
     invalidateCoverRefresh();
     for (const key of coverTargetKeys()) { coverDraft[key] = url; coverDraft.networkCovers[key] = url; if (url && !coverDraft.customCovers.includes(key)) coverDraft.customCovers.push(key); if (!url) coverDraft.customCovers = coverDraft.customCovers.filter(entry => entry !== key); }
+    coverDraft.coverShared=$('coverShared').checked;
     renderCoverDialog();
   };
   $('cancelLocalCover').onclick = () => {
     invalidateCoverRefresh();
     for (const key of coverTargetKeys()) if (isLocalCover(coverDraft[key])) { coverDraft[key] = coverDraft.networkCovers[key] || ''; coverDraft.customCovers = coverDraft.customCovers.filter(entry => entry !== key); }
+    coverDraft.coverShared=$('coverShared').checked;
     renderCoverDialog();
   };
   $('coverDialogApply').onclick = () => {
     if ($('coverUrl').dataset.changed === 'true') { $('useNetworkCover').click(); if ($('coverUrl').dataset.changed === 'true') return; }
-    editorCovers = structuredClone(coverDraft); closeCoverDialog();
-    updateCoverPreview(coverFor(editorCovers, ['book', 'manga'].includes($('fieldType').value) ? 'portrait' : 'landscape')); preview.focus();
+    editorCovers = structuredClone(coverDraft);editorCovers.coverShared=$('coverShared').checked; editorCoverDirection = coverDirectionForLayout({ type: $('fieldType').value }); closeCoverDialog();
+    updateCoverPreview(coverFor(editorCovers, editorCoverDirection), editorCoverDirection); preview.focus();
     updateEditorSaveCue(true);
   };
   $('refreshCoverBtn').onclick = refreshCoverImages;
@@ -141,7 +176,7 @@ async function refreshCoverImages() {
     const results = (candidates || []).filter(candidate => candidate.hasOnlineCover !== false && coverFor(candidate, direction) && !/离线/.test(candidate.metadataSource || '') && !String(candidate.id || '').startsWith('offline'));
     if (!results.length) { showToast('未获取到在线封面，现有图片已保留', 'error'); return; }
     const refreshedUrls=new Set(results.flatMap(candidate=>coverUrls(candidate)));
-    for(const key of libraryCoverMemory.keys())if(JSON.parse(key).some(url=>refreshedUrls.has(url)))libraryCoverMemory.delete(key);
+    for(const key of libraryCoverMemory.keys())if(coverSignatureUrls(key).some(url=>refreshedUrls.has(url)))libraryCoverMemory.delete(key);
     const exact = results.find(candidate => String(candidate.name || '').toLowerCase() === name.toLowerCase());
     if (exact || results.length === 1) { apply(exact || results[0]); return; }
     for (const candidate of results) {
@@ -152,4 +187,12 @@ async function refreshCoverImages() {
   } catch { showToast('获取图片失败，现有图片已保留', 'error'); }
   finally { button.disabled = false; button.textContent = '↻ 重新获取图片'; }
 }
-function repairCardCover(image, item, index) { attachStableCover(image,item,index); }
+function repairCardCover(image, item, index) {
+  const backdrop = image.closest('.cover-art-stage')?.querySelector('.cover-art-backdrop');
+  if (backdrop) {
+    const sync = () => { if (image.currentSrc && backdrop.src !== image.currentSrc) backdrop.src = image.currentSrc; };
+    image.addEventListener('load', sync);
+    image.addEventListener('error', sync);
+  }
+  attachStableCover(image,item,index);
+}

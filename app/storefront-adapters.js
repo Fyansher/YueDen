@@ -50,32 +50,29 @@ function createStorefrontAdapters({json,text,parallel,detail,relevance}){
   const entries=new Map();let successes=0,failures=0;
   const regions=[['hk','zh','zh-hans-hk','香港'],['us','en','en-us','美国'],['jp','ja','ja-jp','日本'],['gb','en','en-gb','英国']];
   const publish=(batch,rank)=>{for(const item of batch){const previous=entries.get(item.id);const links={...previous?.regionalLinks,[regions[rank][0].toUpperCase()]:item.storeUrl};if(!previous||rank<previous._regionRank)entries.set(item.id,{...item,regionalLinks:links,_regionRank:rank});else previous.regionalLinks=links;}emit([...entries.values()].map(({_regionRank,...v})=>v));};
-  await Promise.all(regions.map(async([country,language,locale,label],rank)=>{
-   let cursor='';const seen=new Set();
-   try{for(let offset=0;offset<240;offset+=24){
-    Runtime.check();const variables={countryCode:country,languageCode:language,pageSize:24,pageOffset:offset,searchTerm:query,nextCursor:cursor};
+  const enough=()=>{const scores=[...entries.values()].map(entry=>relevance(entry,terms));return scores.some(value=>value>=150)||scores.filter(value=>value>=80).length>=3;};
+  for(let rank=0;rank<regions.length&&!enough();rank++){
+   const [country,language,locale,label]=regions[rank];try{
+    Runtime.check();const variables={countryCode:country,languageCode:language,pageSize:24,pageOffset:0,searchTerm:query,nextCursor:''};
     const url='https://web.np.playstation.com/api/graphql/v1/op?operationName=getSearchResults&variables='+encodeURIComponent(JSON.stringify(variables))+'&extensions='+encodeURIComponent(JSON.stringify({persistedQuery:{version:1,sha256Hash:PS_SEARCH_HASH}}));
-    const data=await json(url,8500,{headers:{'Content-Type':'application/json','x-psn-store-locale-override':locale==='zh-hans-hk'?'zh-Hans-HK':locale}});
-    const result=data?.data?.universalSearch;if(!Array.isArray(result?.results))throw Error('地区公开检索未成功');successes++;
-    publish(psRows(data,locale,label).filter(entry=>relevance(entry,terms)>0),rank);
-    const signature=result.results.map(v=>v.id).join('|');if(seen.has(signature)||result.pageInfo?.isLast||!result.results.length)break;seen.add(signature);cursor=result.next||'';
-   }}catch{Runtime.check();failures++;}
-  }));
+    const data=await json(url,8500,{headers:{'Content-Type':'application/json','x-psn-store-locale-override':locale==='zh-hans-hk'?'zh-Hans-HK':locale}}),result=data?.data?.universalSearch;
+    if(!Array.isArray(result?.results))throw Error('地区公开检索未成功');successes++;publish(psRows(data,locale,label).filter(entry=>relevance(entry,terms)>0),rank);
+   }catch{Runtime.check();failures++;}
+  }
   if(!successes)throw Error('PlayStation 公开目录暂不可用');
-  const values=[...entries.values()].map(({_regionRank,...v})=>v),complete=new Map(values.map(v=>[v.id,v]));
-  await parallel(values,async entry=>{const html=await text(entry.storeUrl,6500),result=psDetail(await detail(entry,html),html);if(failures)result.detailsUnavailable=true;complete.set(result.id,result);emit([...complete.values()]);return result;});
-  return [...complete.values()];
+  return [...entries.values()].map(({_regionRank,...v})=>({...v,detailsUnavailable:true}));
  }
  async function epic(query,emit,terms){
   const all=[];let gotResponse=false;
   for(let page=1;page<=4;page++){
    const data=await json('https://api.egdata.app/search/v2/search?country=CN&locale=zh-CN',9000,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:query,offerType:'BASE_GAME',page,limit:50})});
-   if(!Array.isArray(data?.offers))throw Error('Epic 公开目录索引未成功');gotResponse=true;all.push(...data.offers);emit(epicRows({offers:all},terms,relevance));if(data.offers.length<50||page*50>=data.total)break;
+   if(!Array.isArray(data?.offers))throw Error('Epic 公开目录索引未成功');gotResponse=true;all.push(...data.offers);const current=epicRows({offers:all},terms,relevance);emit(current);const scores=current.map(entry=>relevance(entry,terms));if(data.offers.length<50||page*50>=data.total||scores.some(value=>value>=150)||scores.filter(value=>value>=80).length>=3)break;
   }
   if(!gotResponse)throw Error('Epic 目录不可用');
-  const entries=epicRows({offers:all},terms,relevance);
-  return parallel(entries,async entry=>{const polls=await json('https://api.egdata.app/offers/'+encodeURIComponent(entry.offerId)+'/polls',5500);const rating=Number(polls?.averageRating);return {...entry,externalRating:polls?.averageRating!=null&&rating>0&&rating<=5?String(rating):'',ratingMax:5,ratingSource:'Epic Games'};});
+  return epicRows({offers:all},terms,relevance).map(entry=>({...entry,detailsUnavailable:true}));
  }
+ playstation.resolve=async entry=>{let url;try{url=new URL(entry.storeUrl);if(url.protocol!=='https:'||url.hostname!=='store.playstation.com')return entry;}catch{return entry;}const html=await text(url.href,6500);return html?psDetail(await detail(entry,html),html):entry;};
+ epic.resolve=async entry=>{if(!/^[\w-]+$/.test(String(entry.offerId||'')))return entry;const polls=await json('https://api.egdata.app/offers/'+encodeURIComponent(entry.offerId)+'/polls',5500),rating=Number(polls?.averageRating);return {...entry,externalRating:polls?.averageRating!=null&&rating>0&&rating<=5?String(rating):'',ratingMax:5,ratingSource:'Epic Games'};};
  return {playstation,epic};
 }
 module.exports={createStorefrontAdapters,psRows,epicRows,dlsiteDetail,psDetail,PS_SEARCH_HASH};

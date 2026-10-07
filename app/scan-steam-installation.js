@@ -1,7 +1,8 @@
 const path=require('node:path');
+const SteamPaths=require('./steam-paths');
 async function installed(dir,rows,ctx,summary){
- const common=path.dirname(dir);if(path.basename(common).toLowerCase()!=='common')return null;
- const steamapps=path.dirname(common);if(path.basename(steamapps).toLowerCase()!=='steamapps')return null;
+ if(!SteamPaths.isSteamCommonGameDirectory(dir))return null;
+ const common=path.dirname(dir),steamapps=path.dirname(common);
  ctx.steamRecords??=new Map();
  if(!ctx.steamRecords.has(steamapps)){
   const records=new Map();ctx.steamRecords.set(steamapps,records);

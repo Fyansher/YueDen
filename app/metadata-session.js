@@ -1,14 +1,15 @@
 /* Each editor search owns a token. Closing, changing a title/type or selecting
    another item invalidates the token before late IPC messages can touch the UI. */
-let metadataSession=null,metadataSessionCounter=0,metadataSelectionEpoch=0;
+let metadataSession=null,metadataSessionCounter=0,metadataSelectionEpoch=0,metadataDetailRequestId=null;
 let metadataPointerBusy=false,metadataPendingProgress=null;
 function cancelMetadataLookup(hide=true) {
   window.audioPanels?.cancelLookup?.();
   if(metadataCandidatePicker){metadataCandidatePicker.job.ignoreAll=true;finishImportCandidate(null);}
   const old=metadataSession;metadataSession=null;metadataRequestId++;metadataSelectionEpoch++;
+  if(metadataDetailRequestId){native.cancelMetadataSearch?.(metadataDetailRequestId);metadataDetailRequestId=null;}
   metadataPendingProgress=null;
   if(old)native.cancelMetadataSearch?.(old.id);
-  const button=$('metadataBtn');if(button){button.disabled=false;button.textContent='⌁ 自动获取信息';button.removeAttribute('aria-busy');}
+  const button=$('metadataBtn');if(button){button.disabled=false;button.textContent='⌁ 获取元数据';button.removeAttribute('aria-busy');}
   if(hide)$('candidateBackdrop')?.classList.add('hidden');
 }
 function validMetadataSession(session) {
@@ -35,7 +36,7 @@ async function fetchMetadata() {
     session.payload=payload;session.running=false;
     receiveMetadataProgress({id:session.id,bundle:Array.isArray(payload)?{integrated:payload,sources:[],loading:false}:payload||{integrated:[],sources:[],loading:false}});
   }catch(error){if(validMetadataSession(session)&&error?.name!=='AbortError')showToast('联网搜索失败；已填写的内容已保留。','error');}
-  finally {if(metadataSession===session){session.running=false;button.disabled=false;button.textContent='⌁ 自动获取信息';button.removeAttribute('aria-busy');}}
+  finally {if(metadataSession===session){session.running=false;button.disabled=false;button.textContent='⌁ 获取元数据';button.removeAttribute('aria-busy');}}
 }
 function installMetadataSession() {
   const unsubscribe=native.onMetadataProgress?.(receiveMetadataProgress);

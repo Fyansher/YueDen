@@ -23,47 +23,22 @@ function jpRow(v) {
   return {id:'ns-jp-'+v.nsuid,name:clean(v.title),aliases:[v.titlek].filter(Boolean),cover:image,coverLandscape:image,publisher:clean(v.maker),releaseDate:date?date[1]+'-'+date[2].padStart(2,'0')+'-'+date[3].padStart(2,'0'):'',description:clean(v.text),storeUrl:url,storeRegion:'日本',regionalLinks:{JP:url},platforms:['ns'],genres:arr(v.genre).map(g=>({'アドベンチャー':'冒险','ロールプレイング':'RPG','アクション':'动作','パズル':'解谜','シミュレーション':'模拟','シューティング':'射击'})[g]||g)};
 }
 function createNintendoSearch({json,text,parallel,detail,relevance,exclude}) {
-  return async function nintendo(query,emit,terms=[query]) {
-    const records=new Map();let successes=0,failures=0;
-    const publish=batch=>{for(const entry of batch)if(entry.storeUrl&&relevance(entry,terms)>0&&!exclude(entry.name))records.set(entry.id,entry);emit([...records.values()]);};
-    await Promise.all([
-      (async()=>{try{
-        for(let page=1;page<=10;page++){
-          const data=await json('https://www.nintendo.com/hk/api/search?'+new URLSearchParams({k:query,directory:'software',size:'100',p:String(page)}),7500);
-          if(!Array.isArray(data?.items)){const html=await text('https://www.nintendo.com/hk/search?k='+encodeURIComponent(query),7500);const entries=flightRecords(html);if(!entries.length&&!html)throw Error('Nintendo 香港搜索不可用');publish(entries.map(hkRow));successes++;break;}
-          successes++;publish(data.items.filter(v=>/Switch/i.test(v.hardwareCategory)).map(hkRow));if(!data.more||!data.items.length)break;
-          if(page===10)failures++;
-        }
-      }catch{Runtime.check();failures++;}})(),
-      (async()=>{try{
-        for(let start=0;start<500;start+=100){
-          const data=await json('https://searching.nintendo-europe.com/en/select?'+new URLSearchParams({fq:'type:GAME',q:query,rows:'100',start:String(start),wt:'json'}),7500);
-          if(!Array.isArray(data?.response?.docs))throw Error('Nintendo 欧洲目录不可用');successes++;
-          publish(data.response.docs.filter(v=>arr(v.system_names_txt).some(s=>/Nintendo Switch/i.test(s))).map(euRow));
-          if(start+100>=data.response.numFound)break;if(start===400)failures++;
-        }
-      }catch{Runtime.check();failures++;}})(),
-      (async()=>{try{
-        for(let page=1;page<=5;page++){
-          const data=await json('https://search.nintendo.jp/nintendo_soft/search.json?'+new URLSearchParams({q:query,opt_hard:'1_HAC',opt_sshow:'1',limit:'100',page:String(page)}),7500);
-          if(!Array.isArray(data?.result?.items))throw Error('Nintendo 日本目录不可用');successes++;
-          publish(data.result.items.filter(v=>v.nsuid&&v.hard==='1_HAC'&&!/DLC|AOC|TRIAL|UPGRADE/i.test(v.sform||'')).map(jpRow));
-          if(page*100>=data.result.total||!data.result.items.length)break;if(page===5)failures++;
-        }
-      }catch{Runtime.check();failures++;}})()
-    ]);
+  async function nintendo(query,emit,terms=[query]) {
+    const records=new Map();let successes=0;
+    const publish=batch=>{for(const entry of batch||[])if(entry.storeUrl&&relevance(entry,terms)>0&&!exclude(entry.name))records.set(entry.id,entry);emit([...records.values()]);};
+    const enough=()=>{const scores=[...records.values()].map(entry=>relevance(entry,terms));return scores.some(score=>score>=150)||scores.filter(score=>score>=80).length>=3;};
+    try{const data=await json('https://www.nintendo.com/hk/api/search?'+new URLSearchParams({k:query,directory:'software',size:'50',p:'1'}),7500);if(Array.isArray(data?.items)){successes++;publish(data.items.filter(v=>/Switch/i.test(v.hardwareCategory)).map(hkRow));}else{const html=await text('https://www.nintendo.com/hk/search?k='+encodeURIComponent(query),7500);if(html){successes++;publish(flightRecords(html).map(hkRow));}}}catch{Runtime.check();}
+    if(!enough())try{const data=await json('https://searching.nintendo-europe.com/en/select?'+new URLSearchParams({fq:'type:GAME',q:query,rows:'50',start:'0',wt:'json'}),7500);if(Array.isArray(data?.response?.docs)){successes++;publish(data.response.docs.filter(v=>arr(v.system_names_txt).some(s=>/Nintendo Switch/i.test(s))).map(euRow));}}catch{Runtime.check();}
+    if(!enough())try{const data=await json('https://search.nintendo.jp/nintendo_soft/search.json?'+new URLSearchParams({q:query,opt_hard:'1_HAC',opt_sshow:'1',limit:'50',page:'1'}),7500);if(Array.isArray(data?.result?.items)){successes++;publish(data.result.items.filter(v=>v.nsuid&&v.hard==='1_HAC'&&!/DLC|AOC|TRIAL|UPGRADE/i.test(v.sform||'')).map(jpRow));}}catch{Runtime.check();}
     if(!successes)throw Error('Nintendo 公开目录暂不可用');
-    // Preserve regional links while avoiding duplicate rows for the same title
-    // and publisher. Editions/remakes have distinct titles and are not collapsed.
     const grouped=new Map();for(const entry of records.values()){
       const key=clean(entry.name).normalize('NFKC').toLowerCase().replace(/[\s\p{P}\p{S}]/gu,'')+'|'+clean(entry.publisher).toLowerCase();
       const old=grouped.get(key);if(!old){grouped.set(key,entry);continue;}
       const [base,extra]=entry.storeRegion==='香港'?[entry,old]:[old,entry];grouped.set(key,{...extra,...base,description:base.description||extra.description,genres:base.genres.length?base.genres:extra.genres,regionalLinks:{...extra.regionalLinks,...base.regionalLinks},storeRegion:[...new Set([base.storeRegion,extra.storeRegion])].join(' / ')});
     }
-    const selected=[...grouped.values()].sort((a,b)=>relevance(b,terms)-relevance(a,terms));emit(selected);
-    const completed=new Map(selected.map(v=>[v.id,v]));
-    await parallel(selected,async entry=>{const page=await text(entry.storeUrl,6000);const result={...await detail(entry,page),detailsUnavailable:!page&&!entry.description||failures>0};completed.set(result.id,result);emit([...completed.values()]);return result;});
-    return [...completed.values()];
-  };
+    const selected=[...grouped.values()].sort((a,b)=>relevance(b,terms)-relevance(a,terms)).slice(0,40);emit(selected);return selected;
+  }
+  nintendo.resolve=async candidate=>{let url;try{url=new URL(candidate.storeUrl);if(url.protocol!=='https:'||!/(?:^|\.)nintendo\.com$|(?:^|\.)nintendo-europe\.com$/i.test(url.hostname))return candidate;}catch{return candidate;}const page=await text(url.href,6000);return page?detail(candidate,page):candidate;};
+  return nintendo;
 }
 module.exports={createNintendoSearch,flightRecords,hkRow,euRow,jpRow};

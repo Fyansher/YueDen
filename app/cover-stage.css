@@ -1,0 +1,251 @@
+/* Display complete artwork over a soft, darkened extension of the same image. */
+.cover-art-stage {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  isolation: isolate;
+  background: linear-gradient(145deg, #263a49, #121c28);
+}
+.cover-art-stage::after,
+#editorForm #coverPreview::after {
+  content: "";
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  background: rgba(4, 8, 14, .34);
+  pointer-events: none;
+}
+.cover-art-backdrop {
+  position: absolute !important;
+  z-index: 0;
+  inset: -18px !important;
+  display: block;
+  width: calc(100% + 36px) !important;
+  height: calc(100% + 36px) !important;
+  object-fit: cover !important;
+  object-position: center !important;
+  filter: blur(18px) brightness(.52) saturate(.78);
+  opacity: .96;
+  transform: scale(1.04);
+  pointer-events: none;
+}
+.cover-art-image {
+  position: relative !important;
+  z-index: 2;
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+  min-width: 0;
+  min-height: 0;
+  object-fit: contain !important;
+  object-position: center !important;
+  transform: none !important;
+  filter: none !important;
+}
+.library-grid .cover-art-image {
+  object-fit: cover !important;
+  object-position: center !important;
+}
+.library-grid .card-cover::after { display: none !important; }
+.library-grid .card-cover > .cover-art-stage { border-radius: inherit; }
+.library-grid.list-layout .compact-row .card-cover > .cover-art-stage { border-radius: 6px; }
+#editorForm .editor-top {
+  grid-template-columns: minmax(220px, 340px) minmax(0, 1fr);
+  align-items: stretch;
+  gap: 24px;
+}
+#editorForm .editor-top .cover-column { min-width: 0; }
+#editorForm .editor-top .editor-cover-wrap {
+  width: 100%;
+  height: clamp(260px, 33vh, 330px);
+}
+#editorForm .editor-top #coverPreview {
+  position: relative;
+  display: grid;
+  width: 100%;
+  height: 100%;
+  max-height: none;
+  place-items: center;
+  overflow: hidden;
+  isolation: isolate;
+  border: 1px solid color-mix(in srgb, var(--line) 75%, transparent);
+  border-radius: 12px;
+  background: linear-gradient(145deg, #263a49, #121c28);
+  color: var(--muted-2);
+  box-shadow: 0 12px 32px #0003;
+  cursor: pointer;
+}
+#editorForm .editor-top #coverPreview.empty-cover { height: 100%; max-height: none; }
+#editorForm #coverPreview > .cover-art-backdrop { border-radius: inherit; }
+#editorForm #coverPreview > .cover-art-image { border-radius: 8px; }
+#editorForm #coverPreview > .cover-empty-label {
+  position: relative;
+  z-index: 2;
+  padding: 10px 14px;
+  border: 1px solid #ffffff24;
+  border-radius: 999px;
+  background: #0b1420a8;
+  color: #d1dae3;
+  font-size: 13px;
+}
+#editorForm .cover-edit-rail {
+  top: 12px;
+  right: 12px;
+  bottom: auto;
+  height: 38px;
+}
+#editorForm .cover-edit-button {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: #101b28d9;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 4px 14px #0005;
+  opacity: .36;
+  transition: opacity .2s, border-color .2s, background .2s;
+}
+#editorForm .editor-cover-wrap:hover .cover-edit-button,
+#editorForm .cover-edit-button:focus-visible { opacity: .85; }
+#editorForm .cover-edit-button:hover { opacity: 1; }
+
+/* Anchor the identity and ratings to the cover, with the type row centered between them. */
+#editorForm .editor-identity {
+  grid-template-rows: auto minmax(0, 1fr) auto minmax(0, 1fr) auto;
+  align-content: stretch;
+  gap: 0;
+}
+#editorForm .editor-name-row {
+  grid-row: 1;
+  grid-template-columns: minmax(0, 1fr) minmax(108px, 128px) minmax(145px, 168px);
+  align-items: stretch;
+  gap: 10px;
+}
+#editorForm .editor-name-row > .field { line-height: 1.5; }
+#editorForm .editor-name-row > .hidden { display: none !important; }
+#editorForm .editor-name-row:has(#steamAppIdField.hidden) {
+  grid-template-columns: minmax(0, 1fr) minmax(145px, 168px);
+}
+#editorForm .editor-name-row:has(#steamAppIdField.hidden):has(.editor-metadata-actions.hidden) {
+  grid-template-columns: minmax(0, 1fr);
+}
+#editorForm .editor-name-row:has(.editor-metadata-actions.hidden):not(:has(#steamAppIdField.hidden)) {
+  grid-template-columns: minmax(0, 1fr) minmax(108px, 128px);
+}
+#editorForm .editor-metadata-actions {
+  display: grid;
+  grid-template-rows: calc(1lh + 6px) 36px auto;
+  align-content: start;
+  align-items: start;
+  justify-items: stretch;
+  min-width: 0;
+  gap: 0;
+  padding-top: 0;
+}
+#editorForm #metadataBtn {
+  grid-row: 2;
+  width: 100%;
+  height: 36px;
+  min-height: 36px;
+  padding-inline: 7px;
+  font-size: 10px;
+  white-space: nowrap;
+}
+#editorForm .metadata-coverage {
+  grid-row: 3;
+  margin-top: 2px;
+  max-height: 2.6em;
+  overflow: hidden;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+#editorForm .editor-type-row {
+  grid-row: 3;
+  align-self: center;
+  grid-template-columns: minmax(105px, .82fr) minmax(0, 1fr) minmax(0, 1fr);
+  gap: 9px;
+}
+#editorForm .editor-type-row { align-content: center; }
+#editorForm .editor-type-row > .field { min-width: 0; }
+#editorForm .score-row {
+  grid-row: 5;
+  align-self: end;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
+  gap: 12px;
+  min-height: 0;
+  margin: 0;
+}
+#editorForm .score-row > .field {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+#editorForm .score-row .rating-editor {
+  flex: 1;
+  min-height: 104px;
+  margin: 6px 0 5px;
+  align-items: center;
+}
+#editorForm .score-row #platformRatingDisplay {
+  flex: 1;
+  min-height: 104px;
+  margin-top: 6px;
+  align-items: stretch;
+}
+#editorForm .score-row .platform-gauge-column {
+  align-self: stretch;
+  justify-content: space-between;
+}
+#editorForm .credits-grid { border-top: 0; }
+@media (max-width: 880px) {
+  #editorForm .editor-metadata-actions { grid-template-rows: auto auto; gap: 2px; }
+  #editorForm #metadataBtn, #editorForm .metadata-coverage { grid-row: auto; }
+  #editorForm .metadata-coverage { margin-top: 0; }
+}
+@media (max-width: 880px) {
+  #editorForm .editor-top .editor-cover-wrap {
+    height: auto;
+    min-height: clamp(230px, 30vh, 290px);
+    flex: 1;
+  }
+  #editorForm .editor-name-row {
+    grid-template-columns: minmax(0, 1fr) minmax(105px, 128px);
+    gap: 8px;
+  }
+  #editorForm .editor-name-row:has(#steamAppIdField.hidden) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  #editorForm .editor-name-row:has(.editor-metadata-actions.hidden):not(:has(#steamAppIdField.hidden)) {
+    grid-template-columns: minmax(0, 1fr) minmax(105px, 128px);
+  }
+  #editorForm .editor-metadata-actions {
+    grid-column: 1 / -1;
+    align-items: flex-start;
+    padding-top: 0;
+  }
+  #editorForm .editor-type-row { gap: 7px; }
+}
+@media (max-width: 660px) {
+  #editorForm .editor-name-row { grid-template-columns: minmax(0, 1fr) minmax(92px, 112px); }
+  #editorForm .editor-name-row:has(#steamAppIdField.hidden) { grid-template-columns: minmax(0, 1fr); }
+  #editorForm .editor-type-row { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
+  #editorForm .editor-type-row .type-field { grid-column: 1 / -1; }
+  #editorForm .score-row { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  #editorForm .editor-top .editor-cover-wrap {
+    height: auto;
+    min-height: clamp(200px, 30vh, 250px);
+    flex: 1;
+  }
+}
+@media (max-width: 880px) {
+  #editorForm .editor-top { grid-template-columns: minmax(175px, 33vw) minmax(0, 1fr); gap: 16px; }
+  #editorForm .editor-top .editor-cover-wrap { height: clamp(230px, 30vh, 290px); }
+}
+@media (max-width: 660px) {
+  #editorForm .editor-top { grid-template-columns: minmax(138px, 38vw) minmax(0, 1fr); gap: 12px; }
+  #editorForm .editor-top .editor-cover-wrap { height: clamp(200px, 30vh, 250px); }
+  #editorForm .cover-edit-rail { top: 8px; right: 8px; }
+}

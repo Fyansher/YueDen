@@ -280,7 +280,7 @@ function renderLibrary() {
    }catch(error){showToast('操作未完成：'+error.message,'error');}
   });
  });
- all('.card-cover img').forEach((image,index)=>repairCardCover(image,items.find(item=>item.id===image.closest('.resource-card').dataset.id)||{},index));
+ all('.card-cover img.cover-art-image').forEach((image,index)=>repairCardCover(image,items.find(item=>item.id===image.closest('.resource-card').dataset.id)||{},index));
  renderLibrarySelection();renderSnapshotSelectionUi();decorateLocalCards();fitCardTags();
  $('libraryGrid').dataset.motionLayout=layout;
  $('libraryGrid').dataset.motionView=activeView;
@@ -334,19 +334,20 @@ function setStatusOptions(type, selected = '') { selected = StatusModel.normaliz
 function updateTypeFields(type = $('fieldType')?.value || 'game') {
   const show = (selector, enabled) => all(selector).forEach(node => node.classList.toggle('hidden', !enabled));
   const game = type === 'game', publication = ['book', 'manga'].includes(type), media = ['movie', 'anime'].includes(type);
+  const localOnly=['audio','software','document','unknown_application','unknown_collection'].includes(type);
   $('editorForm').dataset.mediaType = type;window.audioEditor?.show(type);
-  show('.game-only', game); const platforms=PlatformModel.detect({...editorMetadata,storeUrl:valueFor('fieldStoreUrl'),steamAppId:valueFor('fieldSteamAppId')});show('#steamAppIdField',game&&(!platforms.length||platforms.includes('steam'))); show('#pickSavePathsBtn, #backupSaveBtn', game);
+  show('.game-only', game); const platforms=PlatformModel.detect({...editorMetadata,storeUrl:valueFor('fieldStoreUrl'),steamAppId:valueFor('fieldSteamAppId')});show('#steamAppIdField',game&&platforms.includes('steam')); show('#pickSavePathsBtn, #backupSaveBtn', game);
   renderPlatformPicker();
   show('.media-only', media); show('.publication-only', publication); show('.resource-only', !game);
-  const localOnly=['audio','software','document','unknown_application','unknown_collection'].includes(type);show('#metadataBtn',!localOnly||type==='audio');
+  show('#metadataBtn',!localOnly||type==='audio');$('metadataBtn').parentElement.classList.toggle('hidden',localOnly&&type!=='audio'&&!editorMetadata.metadataSource);
   $('developerField').firstChild.textContent = game ? '开发商 / 工作室' : publication ? '作者 / 原作' : type === 'movie' ? '导演' : '制作 / 导演';
   $('publisherField').firstChild.textContent = publication ? '出版社' : game ? '发行商' : '平台 / 制作方';
   $('castField').firstChild.textContent = type === 'movie' ? '演员' : '声优';
   $('resourceUrlLabel').textContent = publication ? '购买 / 阅读链接' : '观看 / 访问链接';
   $('releaseDateField').firstChild.textContent = publication ? '出版日期' : '发行日期';
   $('platformRatingLabel').textContent = game ? 'Steam 评价' : '来源平台评分'; renderPlatformRating();
-  $('playtimeField').firstChild.textContent = game ? '游玩时长（小时）' : '阅读时长（小时）';
-  show('#playtimeField', game || publication); show('#platformRatingField', type !== 'other');
+  $('playtimeField').firstChild.textContent = game ? '游玩时长（小时）' : media ? '观看时长（小时）' : '阅读时长（小时）';
+  show('#playtimeField', game || publication || media); show('#platformRatingField', type !== 'other');
   if(localOnly){show('#platformRatingField',false);$('developerField').firstChild.textContent=['software','unknown_application'].includes(type)?'开发者 / 公司':'作者';$('publisherField').firstChild.textContent=['software','unknown_application'].includes(type)?'发行方':'来源 / 机构';}
   $('fieldGenres').placeholder=type==='audio'?'流行, 古典, 环境音':'动作, RPG';
   $('fieldCompletedDate').closest('.field').classList.toggle('hidden',type==='audio');
@@ -448,11 +449,16 @@ function updateSavePathHint() {
   const field=$('fieldSavePaths');if(field)field.value=JSON.stringify(editorSavePaths);
 }
 function updateLinkButtons() { $('openLocalResourceBtn').disabled = !valueFor('fieldLocalPath'); $('openResourceUrlBtn').disabled = !valueFor('fieldResourceUrl'); $('openStoreBtn').disabled = !valueFor('fieldStoreUrl'); $('openNoteBtn').disabled = !valueFor('fieldNoteUrl'); $('backupSaveBtn').disabled = !editorId || !editorSavePaths.length; }
-function fillEditor(item) { cancelMetadataLookup(); hideSettingsToast(); ++editorFileRequest; closeResourcePathMenu(); endEditorSaveCue(); item = MetadataText.candidate(item || {}); $('editorId').value = item?.id || ''; $('editorEyebrow').textContent = item ? '编辑资源' : '新建资源'; $('editorTitle').textContent = item ? item.name : '添加资源'; $('fieldName').value = item?.name || ''; $('fieldType').value = item?.type || 'game'; setStatusOptions($('fieldType').value, item?.status || ''); $('fieldCompletedDate').value = item?.completedDate || ''; $('fieldPlaytime').value = item?.playtime ?? ''; $('fieldGenres').value = (item?.genres || []).join(', '); $('fieldCategories').value = (item?.categories || []).join(', '); $('fieldDeveloper').value = item?.developer || ''; $('fieldPublisher').value = item?.publisher || ''; $('fieldReleaseDate').value = item?.releaseDate || ''; $('fieldExternalRating').value = item?.externalRating || item?.steamRating || ''; $('fieldSteamAppId').value = item?.steamAppId || ''; $('fieldCast').value = (item?.cast || []).join(', '); $('fieldEpisodes').value = item?.episodes ?? ''; $('fieldIsbn').value = item?.isbn || ''; $('fieldPages').value = item?.pages ?? ''; $('fieldTranslator').value = item?.translator || ''; $('fieldResourceUrl').value = item?.resourceUrl || ''; $('fieldLocalPath').value = item?.localPath || ''; renderMetadataCoverage(item); fillCoverFields(item); $('fieldReview').value = item?.review || ''; $('fieldDescription').value = item?.description || ''; $('fieldStoreUrl').value = item?.storeUrl || ''; $('fieldNoteUrl').value = item?.noteUrl || ''; editorSavePaths = [...(item?.savePaths || [])]; updateSavePathHint(); setRating(item?.rating ?? null); updateCoverPreview(coverFor(item, ['book', 'manga'].includes(item.type) ? 'portrait' : 'landscape')); $('deleteBtn').classList.toggle('hidden', !item); updateLinkButtons(); $('editorBackdrop').classList.remove('hidden'); updateTypeFields($('fieldType').value); ensureBackupPanel(); renderBackupList(); window.audioEditor?.fill(item);beginEditorSaveCue(); requestAnimationFrame(syncOverflowFields); setTimeout(() => {if(!$('editorBackdrop').classList.contains('hidden'))$('fieldName').focus();}, 30); }
-function updateCoverPreview(url) {
-  const preview = $('coverPreview'); preview.classList.toggle('empty-cover', !url);
-  preview.innerHTML = url ? '<img src="' + esc(url) + '" alt="' + esc(valueFor('fieldName') || '封面') + '">' : '<span>暂无封面</span>';
-  const image = preview.querySelector('img'); if (image) { image.dataset.coverDirection = ['book','manga'].includes($('fieldType').value)?'portrait':'landscape'; attachStableCover(image,{...editorCovers,name:valueFor('fieldName')}); }
+function fillEditor(item) { cancelMetadataLookup(); hideSettingsToast(); ++editorFileRequest; closeResourcePathMenu(); endEditorSaveCue(); item = MetadataText.candidate(item || {}); $('editorId').value = item?.id || ''; $('editorEyebrow').textContent = item ? '编辑资源' : '新建资源'; $('editorTitle').textContent = item ? item.name : '添加资源'; $('fieldName').value = item?.name || ''; $('fieldType').value = item?.type || 'game'; setStatusOptions($('fieldType').value, item?.status || ''); $('fieldCompletedDate').value = item?.completedDate || ''; $('fieldPlaytime').value = item?.playtime ?? ''; $('fieldGenres').value = (item?.genres || []).join(', '); $('fieldCategories').value = (item?.categories || []).join(', '); $('fieldDeveloper').value = item?.developer || ''; $('fieldPublisher').value = item?.publisher || ''; $('fieldReleaseDate').value = item?.releaseDate || ''; $('fieldExternalRating').value = item?.externalRating || item?.steamRating || ''; $('fieldSteamAppId').value = item?.steamAppId || ''; $('fieldCast').value = (item?.cast || []).join(', '); $('fieldEpisodes').value = item?.episodes ?? ''; $('fieldIsbn').value = item?.isbn || ''; $('fieldPages').value = item?.pages ?? ''; $('fieldTranslator').value = item?.translator || ''; $('fieldResourceUrl').value = item?.resourceUrl || ''; $('fieldLocalPath').value = item?.localPath || ''; renderMetadataCoverage(item); fillCoverFields(item); $('fieldReview').value = item?.review || ''; $('fieldDescription').value = item?.description || ''; $('fieldStoreUrl').value = item?.storeUrl || ''; $('fieldNoteUrl').value = item?.noteUrl || ''; editorSavePaths = [...(item?.savePaths || [])]; updateSavePathHint(); setRating(item?.rating ?? null); updateCoverPreview(coverFor(item, editorCoverDirection), editorCoverDirection); $('deleteBtn').classList.toggle('hidden', !item); updateLinkButtons(); $('editorBackdrop').classList.remove('hidden'); updateTypeFields($('fieldType').value); ensureBackupPanel(); renderBackupList(); window.audioEditor?.fill(item);beginEditorSaveCue(); requestAnimationFrame(syncOverflowFields); setTimeout(() => {if(!$('editorBackdrop').classList.contains('hidden'))$('fieldName').focus();}, 30); }
+function updateCoverPreview(url, direction = editorCoverDirection) {
+  const preview = $('coverPreview'); preview.classList.toggle('empty-cover', !url); preview.replaceChildren();
+  if (!url) { const empty = document.createElement('span'); empty.className = 'cover-empty-label'; empty.textContent = '暂无封面'; preview.append(empty); return; }
+  const backdrop = document.createElement('img'); backdrop.className = 'cover-art-backdrop'; backdrop.alt = ''; backdrop.setAttribute('aria-hidden', 'true'); backdrop.src = url;
+  const image = document.createElement('img'); image.className = 'cover-art-image'; image.alt = valueFor('fieldName') || '封面'; image.dataset.coverDirection = direction;
+  image.addEventListener('load', () => { if (image.currentSrc) backdrop.src = image.currentSrc; });
+  image.addEventListener('error', () => { if (image.src) backdrop.src = image.src; });
+  image.src = url; preview.append(backdrop, image);
+  attachStableCover(image,{...editorCovers,name:valueFor('fieldName')});
 }
 function openEditor(id = null) {
   if (document.body.classList.contains('is-disguised')) return;
@@ -474,6 +480,13 @@ async function applyCandidate(candidate) {
   const changed=id=>Object.hasOwn(previous,id)&&$(id).value!==previous[id];
   const scoreChanged=changed('fieldExternalRating'),coverChanged=Boolean(metadataSession?.covers&&metadataSession.covers!==JSON.stringify(getEditorCovers()));
   cancelMetadataLookup();const epoch=metadataSelectionEpoch,owner=editorId,type=$('fieldType').value;
+  if(native.resolveMetadataCandidate){
+    const requestId='candidate-'+Date.now()+'-'+Math.random().toString(36).slice(2,8);metadataDetailRequestId=requestId;
+    try{const resolved=await native.resolveMetadataCandidate(requestId,candidate);if(resolved?.canceled)return;if(resolved)candidate=MetadataText.candidate(resolved);}
+    catch{showToast('部分详情暂不可用，已保留搜索阶段资料');}
+    finally{if(metadataDetailRequestId===requestId)metadataDetailRequestId=null;}
+    if(epoch!==metadataSelectionEpoch||editorId!==owner||$('fieldType').value!==type||$('editorBackdrop').classList.contains('hidden'))return;
+  }
   const fields={fieldName:'name',fieldPlaytime:'playtime',fieldGenres:'genres',fieldDeveloper:'developer',fieldPublisher:'publisher',fieldReleaseDate:'releaseDate',fieldExternalRating:'externalRating',fieldCast:'cast',fieldEpisodes:'episodes',fieldIsbn:'isbn',fieldPages:'pages',fieldTranslator:'translator',fieldStoreUrl:'storeUrl',fieldDescription:'description'};
   for(const [id,key]of Object.entries(fields)){
     if(changed(id)||key==='playtime'&&valueFor(id)!=='')continue;const value=candidate[key]??(key==='externalRating'?candidate.steamRating:null);
@@ -485,6 +498,7 @@ async function applyCandidate(candidate) {
   if(hadPlaytime)for(const key of ['steamPlaytime','steamPlaytimeAt','playtimeSource'])editorMetadata[key]=before[key];
   if(manualTime)editorMetadata.playtimeSource='手动';
   if(before.platformsManual){editorMetadata.platforms=before.platforms;editorMetadata.platformsManual=true;editorMetadata.fieldSources.platforms='手动';}
+  else if(type==='game'&&Array.isArray(candidate.platforms)&&candidate.platforms.length){editorMetadata.platforms=[...new Set([...(before.platforms||[]),...candidate.platforms])];editorMetadata.platformLinks={...before.platformLinks,...candidate.platformLinks};editorMetadata.fieldSources.platforms=candidate._sourceId==='steam'||/^Steam$/i.test(candidate.metadataSource||'')?'Steam':before.fieldSources?.platforms||'';}
   if(scoreChanged||!(candidate.externalRating||candidate.steamRating))for(const key of ['ratingSource','ratingValue','ratingMax','ratingEdited'])editorMetadata[key]=before[key];
   for(const [id,key]of Object.entries(fields))if(changed(id)||candidate[key]===undefined||candidate[key]===null||candidate[key]==='')editorMetadata.fieldSources[key]=before.fieldSources?.[key]||'';
   if(!coverChanged)applyCoverCandidate(candidate);
@@ -800,7 +814,8 @@ $('clearNetworkCacheBtn').addEventListener('click',async()=>{
   catch(error){$('networkCacheSize').textContent='清除失败';showToast('清除缓存失败：'+error.message,'error');}
   finally{networkCacheBusy=false;button.disabled=false;button.textContent='清除缓存';}
 });
-$('exportBtn').addEventListener('click', async () => { if (!(await askConfirm('备份将包含资源资料和路径、设置以及远程音频库连接。WebDAV 和远程音频登录信息会以可恢复的明文写入所选 JSON 文件，请保存到可信位置。继续导出吗？', { title: '导出完整备份', confirmText: '继续导出' }))) return; try { if (await native.exportData(state)) showToast('完整数据备份已导出'); } catch (error) { showToast('数据备份失败：' + error.message, 'error'); } }); $('importBtn').addEventListener('click', async () => { const imported = await native.importData(); if (!imported) return; const message = imported.includesSettings ? '将覆盖当前资源库、设置和远程音频库连接。备份中的登录凭据会重新加密保存在本机。继续导入吗？' : '将覆盖当前资源库；旧格式备份不会修改设置和远程音频连接。继续导入吗？'; if (!(await askConfirm(message, { title: '导入前确认', confirmText: '继续导入', danger: true }))) return; try { await native.restoreData(imported.token); state = await native.loadLibrary(); settings = await native.loadSettings(); render(); if (activeView === 'settings') loadSettingsForm(); showToast('数据已恢复'); } catch (error) { showToast('数据恢复失败：' + error.message, 'error'); } }); $('minimizeBtn').addEventListener('click', native.minimize);  $('closeBtn').addEventListener('click', async () => { if (await flushSettingsSave()) native.close(); });
+$('openLogsBtn').addEventListener('click',async()=>{try{const result=await native.openMetadataDiagnosticLogs();if(!result?.ok)showToast(result?.message||'无法打开日志文件夹','error');}catch(error){showToast(error?.message||'无法打开日志文件夹','error');}});
+$('exportBtn').addEventListener('click', async () => { if (!(await askConfirm('备份将包含资源资料和路径、设置以及远程音频库连接。WebDAV 和远程音频登录信息会以可恢复的明文写入所选 JSON 文件，请保存到可信位置。继续导出吗？', { title: '导出完整备份', confirmText: '继续导出' }))) return; if (!(await flushSettingsSave())) return; try { if (await native.exportData(state)) showToast('完整数据备份已导出'); } catch (error) { showToast('数据备份失败：' + error.message, 'error'); } }); $('importBtn').addEventListener('click', async () => { const imported = await native.importData(); if (!imported) return; const message = imported.includesSettings ? '将覆盖当前资源库、设置和远程音频库连接。备份中的登录凭据会重新加密保存在本机。继续导入吗？' : '将覆盖当前资源库；旧格式备份不会修改设置和远程音频连接。继续导入吗？'; if (!(await askConfirm(message, { title: '导入前确认', confirmText: '继续导入', danger: true }))) return; try { await native.restoreData(imported.token); state = await native.loadLibrary(); settings = await native.loadSettings(); render(); if (activeView === 'settings') loadSettingsForm(); showToast('数据已恢复'); } catch (error) { showToast('数据恢复失败：' + error.message, 'error'); } }); $('minimizeBtn').addEventListener('click', native.minimize);  $('closeBtn').addEventListener('click', async () => { if (await flushSettingsSave()) native.close(); });
 }
 
 ensureDragMotion();

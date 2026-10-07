@@ -1,2 +1,52 @@
 /* Pause only enrichment. Scanning and confirmed local imports keep their own jobs. */
-(function(root){function create({rows,eligible,query,apply,cancel,changed=()=>{}}){let generation=0,paused=false,closed=false,running=false,requested=false,stopping=Promise.resolve();async function resume(){if(closed)return;if(running){requested=true;return;}paused=false;running=true;const epoch=++generation;changed('loading');try{await stopping;if(closed||paused||epoch!==generation)return;for(const row of rows()){if(closed||paused||epoch!==generation)break;if(!eligible(row)||row.enrichmentState==='done')continue;const signature=JSON.stringify([row.name,row.type,row.item?.name]);delete row.metadataError;row.enrichmentState='loading';changed('loading',row);try{const value=await query(row);if(closed||paused||epoch!==generation)break;if(signature!==JSON.stringify([row.name,row.type,row.item?.name])){row.enrichmentState='pending';changed('loading',row);continue;}apply(row,value);row.enrichmentState='done';}catch(error){if(closed||paused||epoch!==generation)break;row.enrichmentState='error';row.metadataError=error.message;}changed('loading',row);}}catch(error){if(epoch===generation){for(const row of rows())if(eligible(row))row.metadataError=error.message;changed('error',null,error);}}finally{if(epoch===generation){running=false;changed(paused?'paused':'idle');if(requested&&!closed&&!paused){requested=false;void resume();}}}}function pause(){requested=false;paused=true;generation++;running=false;stopping=Promise.resolve(cancel());for(const row of rows())if(row.enrichmentState==='loading')row.enrichmentState='paused';changed('paused');return stopping;}return {resume,pause,close(){closed=true;return pause().catch(error=>changed('error',null,error));},get paused(){return paused;}};}function reconcile(previous,incoming,key=row=>row.id){const old=new Map(previous.map(row=>[key(row),row]));return incoming.map(row=>{const prior=old.get(key(row));if(!prior)return row;const preserved={};for(const field of ['selected','enrichmentState','metadataBundle','metadataChecked','metadataPrepared','resolvedMetadata','metadataError','prepared','candidates','metadataMessage','providers','invalidated','metadataInvalidated'])if(prior[field]!==undefined)preserved[field]=prior[field];if(prior.item&&row.item&&(prior.enrichmentState==='loading'||prior.enrichmentState==='done'))row.item={...row.item,...prior.item,audio:{...row.item.audio,...prior.item.audio,sources:row.item.audio.sources,tracks:row.item.audio.tracks.map(track=>({...track,...prior.item.audio.tracks.find(old=>old.id===track.id),sourceRefs:track.sourceRefs}))}};Object.assign(prior,row,preserved);return prior;});}const api={create,reconcile};if(typeof module!=='undefined')module.exports=api;else root.ImportMetadataQueue=api;})(typeof window==='undefined'?globalThis:window);
+(function(root){
+ function create({rows,eligible,query,apply,cancel,changed=()=>{}}){
+  let generation=0,paused=false,closed=false,running=false,requested=false,stopping=Promise.resolve();
+  const idleWaiters=new Set();
+  function notifyIdle(){if(running||requested)return;for(const resolve of idleWaiters)resolve();idleWaiters.clear();}
+ async function resume(){
+   if(closed)return;
+   if(running){requested=true;return;}
+   paused=false;running=true;const epoch=++generation;changed('loading');
+   try{
+    await stopping;if(closed||paused||epoch!==generation)return;
+    const pending=rows();let cursor=0;
+    async function worker(){while(!closed&&!paused&&epoch===generation){const row=pending[cursor++];if(!row)return;if(!eligible(row)||row.enrichmentState==='done')continue;
+      const signature=JSON.stringify([row.name,row.type,row.item?.name]),current=()=>!closed&&!paused&&epoch===generation&&signature===JSON.stringify([row.name,row.type,row.item?.name]);delete row.metadataError;row.enrichmentState='loading';changed('loading',row);
+      try{
+       const onProgress=value=>{if(!current())return;apply(row,value,{partial:true});changed('loading',row);};
+       const value=await query(row,onProgress);if(!current())return;
+       if(signature!==JSON.stringify([row.name,row.type,row.item?.name])){row.enrichmentState='pending';changed('loading',row);continue;}
+       apply(row,value,{partial:false});row.enrichmentState='done';
+      }catch(error){if(closed||paused||epoch!==generation)return;row.enrichmentState='error';row.metadataError=error.message;}
+      changed('loading',row);
+     }}
+    await Promise.all(Array.from({length:Math.min(2,pending.length)},()=>worker()));
+   }catch(error){if(epoch===generation){for(const row of rows())if(eligible(row))row.metadataError=error.message;changed('error',null,error);}}
+   finally{
+    if(epoch===generation){
+     running=false;changed(paused?'paused':'idle');
+     if(requested&&!closed&&!paused){requested=false;void resume();}
+     else notifyIdle();
+    }
+   }
+  }
+  function pause(){
+   requested=false;paused=true;generation++;running=false;stopping=Promise.resolve(cancel());
+   for(const row of rows())if(row.enrichmentState==='loading')row.enrichmentState='paused';
+   changed('paused');notifyIdle();return stopping;
+  }
+  function whenIdle(){return running||requested?new Promise(resolve=>idleWaiters.add(resolve)):Promise.resolve();}
+  return {resume,pause,whenIdle,close(){closed=true;return pause().catch(error=>changed('error',null,error));},get paused(){return paused;},get running(){return running||requested;}};
+ }
+ function reconcile(previous,incoming,key=row=>row.id){
+  const old=new Map(previous.map(row=>[key(row),row]));
+  return incoming.map(row=>{
+   const prior=old.get(key(row));if(!prior)return row;const preserved={};
+   for(const field of ['selected','enrichmentState','metadataBundle','metadataChecked','metadataPrepared','resolvedMetadata','metadataError','prepared','candidates','metadataMessage','providers','invalidated','metadataInvalidated'])if(prior[field]!==undefined)preserved[field]=prior[field];
+   if(prior.item&&row.item&&(prior.enrichmentState==='loading'||prior.enrichmentState==='done'))row.item={...row.item,...prior.item,audio:{...row.item.audio,...prior.item.audio,sources:row.item.audio.sources,tracks:row.item.audio.tracks.map(track=>({...track,...prior.item.audio.tracks.find(old=>old.id===track.id),sourceRefs:track.sourceRefs}))}};
+   Object.assign(prior,row,preserved);return prior;
+  });
+ }
+ const api={create,reconcile};if(typeof module!=='undefined')module.exports=api;else root.ImportMetadataQueue=api;
+})(typeof window==='undefined'?globalThis:window);

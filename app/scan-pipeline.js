@@ -1,13 +1,12 @@
 /* One evidence pipeline, independent of the selected library. No spawned programs. */
-const fs=require('node:fs/promises'),path=require('node:path'),crypto=require('node:crypto'),Model=require('./local-model'),Meta=require('./scan-metadata'),Names=require('./scan-naming'),Types=require('./scan-classification'),Policy=require('./scan-policy'),Boundaries=require('./scan-boundaries'),{context}=require('./scan-context');
+const fs=require('node:fs/promises'),path=require('node:path'),crypto=require('node:crypto'),Model=require('./local-model'),Meta=require('./scan-metadata'),Names=require('./scan-naming'),Types=require('./scan-classification'),Policy=require('./scan-policy'),Boundaries=require('./scan-boundaries'),SteamPaths=require('./steam-paths'),{context}=require('./scan-context');
 const idFor=value=>crypto.createHash('sha256').update(Model.pathKey(value)).digest('hex').slice(0,20);
 const engine=r=>r.kind==='directory'&&/(?:_Data$|^Engine$|^MonoBleedingEdge$)/i.test(r.name);
 
 async function scan(roots,filter='all',options={}){
  const ctx=context({...options,filter,budget:{...options.budget,...(options.maxFiles?{maxFiles:options.maxFiles}:{})}}),summaries=new Map(),visited=new Set(),products=new Map(),resources=[],softwareScopes=[],attachments=[],attachmentTrees=[],ignored={wallpaperDirectories:0,auxiliaryFiles:0,nonPageImages:0};
  const summary=async dir=>{if(summaries.has(dir))return summaries.get(dir);const rows=await ctx.summary(dir);if(rows.length<=10000){summaries.set(dir,rows);if(summaries.size>64)summaries.delete(summaries.keys().next().value);}return rows;};
- let lastRowsAt=0,liveQueue=Promise.resolve(),liveError;
- const liveRow=row=>{if(!options.liveMetadata||!options.online||!options.identitySearch||row.naming.volume!=null||row.metadata.series||row.classification.type==='video'||row.classification.type==='unknown_application'||row.classification.type==='software'||row.classification.type==='game')return;liveQueue=liveQueue.then(async()=>{if(liveError)return;ctx.check();await require('./scan-matching').enrich([row],ctx);row.liveMetadataChecked=true;const rows=require('./scan-grouping').group(structuredClone(resources),options.existingItems,filter).filter(r=>filter==='all'||Types.canonicalType(r.type)===Types.canonicalType(filter));options.onProgress?.({checked:ctx.metrics.files,found:rows.length,phase:'资料已核对 '+row.name,rows});}).catch(e=>{liveError=e;});};
+ let lastRowsAt=0;
  const progress=phase=>options.onProgress?.({checked:ctx.metrics.files,found:resources.length,phase,bytes:ctx.metrics.bytes});
  const record=(file,reasonCode,reason,extra)=>ctx.skip(file,reasonCode,reason,extra);
  async function fileInfo(file){const s=await fs.stat(file);return {path:file,name:path.basename(file),size:s.size,mtimeMs:s.mtimeMs};}
@@ -31,7 +30,7 @@ async function scan(roots,filter='all',options={}){
   const reviewRequired=boundaryInfo.confidence<.8||classification.confidence<.8||naming.confidence<.7||classification.type.startsWith('unknown')||classification.conflicts.length>0;
   const row={id,...automatic,...overrides,originalName:naming.rawPathName,naming,classification,boundary:boundaryInfo,evidence,metadata,identifiers:metadata.identifiers||{},scanInfo,reviewRequired,localFiles:files,warnings:[...classification.conflicts,...(metadata.error?[metadata.error]:[])]};
   if(kind==='application'&&metadata.validPe&&metadata.identifiers?.steam&&!overrides.type&&require('./application-identity').role(file,metadata)!=='tool'&&classification.type==='software'){row.type='game';row.reviewRequired=false;row.scanInfo.automatic.type='game';row.scanInfo.steamLibraryAdmission=true;row.evidence.push({rule:'steam-library-admission',source:file,detail:'按用户偏好，有本地Steam产品身份的软件也可收进游戏栏目；保留其真实软件分类'});}
-  resources.push(row);if(options.onProgress&&Date.now()-lastRowsAt>=80){lastRowsAt=Date.now();const snapshot=require('./scan-grouping').group(structuredClone(resources),options.existingItems,filter).filter(r=>filter==='all'||Types.canonicalType(r.type)===Types.canonicalType(filter));options.onProgress({checked:ctx.metrics.files,found:snapshot.length,phase:'已识别 '+row.name,rows:snapshot});}liveRow(row);return row;
+  resources.push(row);if(options.onProgress&&Date.now()-lastRowsAt>=80){lastRowsAt=Date.now();const snapshot=require('./scan-grouping').group(structuredClone(resources),options.existingItems,filter).filter(r=>filter==='all'||Types.canonicalType(r.type)===Types.canonicalType(filter));options.onProgress({checked:ctx.metrics.files,found:snapshot.length,phase:'已识别 '+row.name,rows:snapshot});}return row;
  }
  async function inspect(file,attachmentOf=null){
   ctx.check();const ext=path.extname(file).toLowerCase();let kind,metadata={};
@@ -52,10 +51,10 @@ async function scan(roots,filter='all',options={}){
   if(project){try{const p=JSON.parse((await ctx.read(path.join(dir,project.name),32768)).toString('utf8'));if(['scene','video','web'].includes(p.type)&&p.file&&(p.preview||p.workshopid||p.general)){ignored.wallpaperDirectories++;record(dir,'wallpaper-project','项目清单声明为壁纸，内部素材归属壁纸项目');return;}}catch(error){if(error.code==='SCAN_BUDGET')throw error;}}
   for(const row of rows)if(row.kind==='link')record(path.join(dir,row.name),'symbolic-link','跳过符号链接 / 联接，避免循环与越出扫描范围');
   softwareScopes.push(...await require('./scan-platform-ownership').scopes(dir,rows,{summary,product}));
-  if(path.basename(path.dirname(dir)).toLowerCase()==='common'&&path.basename(path.dirname(path.dirname(dir))).toLowerCase()==='steamapps'){
+  if(SteamPaths.isSteamCommonGameDirectory(dir)){
    const installed=await require('./scan-steam-installation').installed(dir,rows,ctx,summary);
    const exes=rows.filter(r=>r.kind==='file'&&/\.exe$/i.test(r.name));
-   if(!exes.length){const entry=await make(dir,'steam-folder',{title:installed?.title||path.basename(dir),identifiers:installed?.identifiers||{}},{kind:'resource_package',root:dir,confidence:1,ownedPaths:[dir]},[{rule:'steam-common-folder',source:dir,detail:'Steam common 下的直接资源目录；没有直接 EXE 时保留目录入口'}],[]);entry.name=installed?.title||path.basename(dir);entry.scanInfo.automatic.name=entry.name;entry.localPath=dir;entry.reviewRequired=false;return;}
+   if(!exes.length&&!options.requireGameExe){const entry=await make(dir,'steam-folder',{title:installed?.title||path.basename(dir),identifiers:installed?.identifiers||{}},{kind:'resource_package',root:dir,confidence:1,ownedPaths:[dir]},[{rule:'steam-common-folder',source:dir,detail:'Steam common 下的直接资源目录；按当前设置保留文件夹入口'}],[]);entry.name=installed?.title||path.basename(dir);entry.scanInfo.automatic.name=entry.name;entry.localPath=dir;entry.reviewRequired=false;return;}
   }
   const direct=rows.filter(r=>r.kind==='file'&&/\.exe$/i.test(r.name)),programs=[];
   for(const r of direct){const file=path.join(dir,r.name);programs.push({file,metadata:await product(file)});}
@@ -133,13 +132,11 @@ async function scan(roots,filter='all',options={}){
    for(const a of attachments)await inspect(a.path,a.ownerId||'auxiliary');
   }
  }catch(error){if(error.name==='AbortError')throw error;ctx.warnings.push(error.message);}
- await liveQueue;if(liveError)throw liveError;
  // Human overrides are independent of automatic classification and survive rescans.
  require('./scan-software-ownership').apply(resources,softwareScopes);
  let grouped=require('./scan-grouping').group(resources,options.existingItems,filter);
  grouped=require('./scan-application-entries').mergeEntries(grouped,{existingItems:options.existingItems});
  if(options.directoryPreview)grouped=require('./scan-directory-preview').group(grouped,options.existingItems);
- if(options.online&&options.identitySearch)await require('./scan-matching').enrich(grouped.filter(row=>!row.liveMetadataChecked),ctx);
  grouped=require('./scan-application-entries').mergeEntries(grouped,{existingItems:options.existingItems});
  const selected=Types.canonicalType(filter),matches=row=>filter==='all'||!filter||Types.canonicalType(row.type)===selected;
  if(selected==='game')for(const row of grouped.filter(r=>r.type==='software')){const info={path:row.localPath,reasonCode:'non-game-application',reason:row.classification.reason};ctx.skipped.unshift(info);if(ctx.skipped.length>10000)ctx.skipped.pop();}
@@ -148,6 +145,6 @@ async function scan(roots,filter='all',options={}){
  if(selected==='game')for(const row of grouped){if(!items.includes(row)&&row.classification.type==='unknown_application'&&!row.attachmentOf){items.push({...row,type:'game',reviewRequired:true,selected:false,warnings:[...row.warnings,'仅确认应用入口，尚未确认游戏身份，请核对后导入']});}}
  if(['book','manga'].includes(filter))for(const row of grouped){if(!items.includes(row)&&['unknown_collection','document'].includes(row.classification.type)&&!row.attachmentOf&&row.metadata?.container&&!['invalid','unknown-publication',...(filter==='manga'?['text']:[])].includes(row.metadata.container))items.push(row);}
  const pending=grouped.filter(row=>row.reviewRequired&&!items.includes(row)&&(row.classification.type.startsWith('unknown')||row.classification.candidates.some(v=>v.type===selected)));
- return {metadataPhaseCompleted:Boolean(options.online&&options.liveMetadata),items,candidates:grouped,pending,skipped:ctx.skipped,attachments,warnings:ctx.warnings,checked:ctx.metrics.files,ignored,metrics:{...ctx.metrics,durationMs:Date.now()-ctx.started},pipelineVersion:1};
+ return {items,candidates:grouped,pending,skipped:ctx.skipped,attachments,warnings:ctx.warnings,checked:ctx.metrics.files,ignored,metrics:{...ctx.metrics,durationMs:Date.now()-ctx.started},pipelineVersion:1};
 }
 module.exports={scan};
