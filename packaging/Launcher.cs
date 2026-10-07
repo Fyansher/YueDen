@@ -6,8 +6,8 @@ using System.Windows.Forms;
 [assembly: AssemblyTitle("悦森盒 YueDen")]
 [assembly: AssemblyProduct("悦森盒 YueDen")]
 [assembly: AssemblyDescription("本地数字内容管理、播放与阅读")]
-[assembly: AssemblyVersion("1.0.3.0")]
-[assembly: AssemblyFileVersion("1.0.3.0")]
+[assembly: AssemblyVersion("1.0.4.4")]
+[assembly: AssemblyFileVersion("1.0.4.4")]
 internal static class Launcher {
     [STAThread] private static void Main() {
         try {
