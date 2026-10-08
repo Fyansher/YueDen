@@ -202,6 +202,11 @@
       "sha256": "8AA2D0337171498DE893D1A1573A9A128114EFAC74C4CC20519BC393791625D6"
     },
     {
+      "path": "app/backup-webdav-settings.js",
+      "includedInRelease": true,
+      "sha256": "A50263E40B05655AB7BA0CA9BC00AEA58F3F57E5D852B5A69DA4F27305D6433E"
+    },
+    {
       "path": "app/book-catalog-sources.js",
       "includedInRelease": true,
       "sha256": "AB57811EF5D3F35513A61B7E3EC4CF463DC9A9D10143C592D0C6547E100A3091"
@@ -504,7 +509,7 @@
     {
       "path": "app/main.js",
       "includedInRelease": true,
-      "sha256": "51EB1573DBC74E4E497B05B00258ED9F5AD8B1E98A77069826AD1DA20A383110"
+      "sha256": "CE43ABC546DD9966E9B5F34D46F46C09DD853AD8C8338BABCA8270DDB7896EC5"
     },
     {
       "path": "app/media-decoder.js",
@@ -2709,7 +2714,7 @@
     {
       "path": "README.md",
       "includedInRelease": false,
-      "sha256": "4D3A1090BB7D19F41FAA5D360C00844634E37ADA322A3E3BA359EFD4E072E096"
+      "sha256": "8CAAAA05B009DB9BA88762674270EBBDC5FA0A9DD4B32CBB7B5D03C7B424DA3E"
     },
     {
       "path": "tests/app-module.cjs",
@@ -2735,6 +2740,11 @@
       "path": "tests/audio-webdav-address.cjs",
       "includedInRelease": false,
       "sha256": "D3913BBED5D846793147E9183577EC5ADE984C9194C1F33AF4951CF5D85EF80F"
+    },
+    {
+      "path": "tests/backup-webdav-settings.cjs",
+      "includedInRelease": false,
+      "sha256": "5965D6C5D068FD111BB360593265785BBD8FFE74FA6C94388E5FCFDDDB54C05C"
     },
     {
       "path": "tests/book-catalog-1lib.cjs",
@@ -3619,7 +3629,7 @@
     {
       "path": "tests/webdav-state.cjs",
       "includedInRelease": false,
-      "sha256": "C208C268D54C8384F411E2EF2BA20FDFAD0D910C906B82A54C7CBDFECF240885"
+      "sha256": "AABC489A163B81F8C9C454C26C30FD0CBCFFCBEDDECF4580B4D5604F9AF75E07"
     },
     {
       "path": "tests/webdav-sync-choice-session.cjs",

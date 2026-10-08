@@ -59,10 +59,10 @@ test('a recorded one-sided deletion waits for a sync choice, then merges when se
   assert.equal(prepared.state.deletedItems[0].id, 'gone');
 });
 
-test('remote sync state retains a verifiable common base but strips backup-only secrets', () => {
+test('remote sync state retains a verifiable common base but strips local backup-only settings and secrets', () => {
   const base = library([{ id: 'game', name: 'Game' }]);
   const baseState = State.toBaseState(base);
-  const remote = State.toRemoteState({ ...base, localDeviceId: 'device-a', backupSecrets: { password: 'private' }, lineage: baseLineage(baseState) });
+  const remote = State.toRemoteState({ ...base, localDeviceId: 'device-a', backupSecrets: { password: 'private', localWebdavSettings: { webdavUrl: 'https://private.example.test/', webdavUsername: 'private-user' } }, lineage: baseLineage(baseState) });
   assert.equal(remote.localDeviceId, undefined);
   assert.equal(remote.backupSecrets, undefined);
   assert.equal(Sync.hasLineage(remote).items[0].id, 'game');

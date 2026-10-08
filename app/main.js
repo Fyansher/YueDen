@@ -1469,7 +1469,7 @@ function registerIpc() {
     const library=coverStore.exportLibrary({...require('./library-relations').fields(state,normaliseItem),schemaVersion:4,items:(state?.items||[]).map(normaliseItem),categories:state?.categories||[]});
     const backup=localSyncState(library,settings);
     backup.settings.appearance=structuredClone(settings.appearance||initialSettings.appearance);
-    backup.backupSecrets={settings:Object.fromEntries(require('./secure-settings').KEYS.map(key=>[key,settings[key]||''])),audioPasswords:Object.fromEntries(connections.filter(row=>row?.id&&row.password).map(row=>[row.id,row.password]))};
+    backup.backupSecrets={settings:Object.fromEntries(require('./secure-settings').KEYS.map(key=>[key,settings[key]||''])),localWebdavSettings:require('./backup-webdav-settings').exportLocalWebdavSettings(settings),audioPasswords:Object.fromEntries(connections.filter(row=>row?.id&&row.password).map(row=>[row.id,row.password]))};
     fs.writeFileSync(result.filePath, JSON.stringify(coverStore.exportLibrary(backup), null, 2), 'utf8');
     return true;
   });
@@ -1491,7 +1491,7 @@ function registerIpc() {
       const normalized={...require('./library-relations').fields(library,normaliseItem),schemaVersion:4,items:library.items.map(normaliseItem),categories:library.categories||initialState.categories};
       const savedLineage=canonical?parsed.lineage:null;
       let syncLineage=null;if(savedLineage?.schemaVersion===2&&/^[a-f0-9]{64}$/i.test(savedLineage.endpointKey||'')){const state=require('./webdav-state'),baseState=state.toBaseState(savedLineage.baseState);if(state.syncRevision(baseState)===savedLineage.baseRevision)syncLineage={schemaVersion:2,endpointKey:savedLineage.endpointKey,baseRevision:savedLineage.baseRevision,baseState};}
-      let settingsBackup=full?structuredClone(parsed.settings):null;if(canonical&&backupSecrets.settings)settingsBackup={...settingsBackup,...backupSecrets.settings};if(settingsBackup)settingsBackup.appearance={...initialSettings.appearance,...(loadSettings().appearance||{}),...(settingsBackup.appearance||{})};
+      let settingsBackup=full?structuredClone(parsed.settings):null;if(canonical&&backupSecrets.settings)settingsBackup={...settingsBackup,...backupSecrets.settings};if(canonical&&settingsBackup)settingsBackup=require('./backup-webdav-settings').restoreLocalWebdavSettings(settingsBackup,backupSecrets.localWebdavSettings);if(settingsBackup)settingsBackup.appearance={...initialSettings.appearance,...(loadSettings().appearance||{}),...(settingsBackup.appearance||{})};
       const importSettings=canonical||legacyFull&&parsed.backupVersion===2?require('./webdav-state').restoreDeviceSettings(settingsBackup,loadSettings(),syncDeviceId(),devicePathSettings):full?settingsBackup:null;
       const token=require('node:crypto').randomUUID();pendingBackupImports.set(event.sender.id,{token,expires:Date.now()+300000,full,library:normalized,settings:importSettings,audioConnections:importedConnections,syncLineage});
       return {token,includesSettings:full,itemCount:normalized.items.length};
