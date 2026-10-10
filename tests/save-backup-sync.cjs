@@ -27,6 +27,18 @@ test('immediate backup creates and refreshes the local snapshot before cloud upl
   assert.ok(flow.indexOf('await refreshSnapshotIndex(true)') < flow.indexOf('native.syncBackupSnapshot('));
 });
 
+test('immediate backup shows upload progress and synced rows do not keep a loading cursor', () => {
+  const renderer = fs.readFileSync(path.join(__dirname, '../app/renderer.js'), 'utf8');
+  const start = renderer.indexOf('async function backupCurrentSaves()');
+  const end = renderer.indexOf('\nfunction webdavSyncPreviewContent', start);
+  const flow = renderer.slice(start, end);
+  assert.ok(flow.indexOf('setSnapshotUploadProgress(itemId,result.snapshotId,true)') < flow.indexOf('native.syncBackupSnapshot('));
+  assert.match(renderer, /function setSnapshotUploadProgress\(itemId,backupId,uploading\)/);
+  const css = fs.readFileSync(path.join(__dirname, '../app/library-actions.css'), 'utf8');
+  assert.match(css, /\.snapshot-sync-button:disabled\{opacity:\.72;cursor:default\}/);
+  assert.match(css, /\.snapshot-sync-button\.uploading:disabled\{cursor:progress\}/);
+});
+
 test('local backup failure does not refresh or attempt a cloud upload', async () => {
   let refreshed = false;
   let uploadCalls = 0;
@@ -118,6 +130,24 @@ test('catalog failure keeps snapshot status pending', async () => {
   assert.equal(marked, false);
 });
 
+test('remote catalog listing alone cannot promote a local snapshot to synced', () => {
+  const main = fs.readFileSync(path.join(__dirname, '../app/main.js'), 'utf8');
+  const renderer = fs.readFileSync(path.join(__dirname, '../app/renderer.js'), 'utf8');
+  const listStart = main.indexOf("ipcMain.handle('saves:listRemote'");
+  const listEnd = main.indexOf("ipcMain.handle('saves:restoreRemote'", listStart);
+  const remoteList = main.slice(listStart, listEnd);
+  const syncStart = main.indexOf('async function syncOneSnapshot(');
+  const syncEnd = main.indexOf('\nasync function syncWebdav(', syncStart);
+  const syncFlow = main.slice(syncStart, syncEnd);
+  const renderStart = renderer.indexOf('async function renderBackupList()');
+  const renderEnd = renderer.indexOf('\nfunction webdavSyncPreviewContent', renderStart);
+  const backupList = renderer.slice(renderStart, renderEnd);
+  assert.doesNotMatch(remoteList, /markSaveSyncedBatch|markSaveSynced\(/);
+  assert.doesNotMatch(backupList, /syncStatus:\s*'已同步'/);
+  assert.match(syncFlow, /catch\(error\)\{\s*clearSaveSynced\(entry\.id,endpointKey\);\s*throw error;/);
+  assert.match(main, /function decorateBackup\(entry,stored,index\)\{const synced=index\[entry\.id\]\?\.manifestHash===entry\.manifestHash/);
+});
+
 test('settings sync never marks snapshots before catalog publication and lineage commit',()=>{
   const main=fs.readFileSync(path.join(__dirname,'../app/main.js'),'utf8');
   const syncStart=main.indexOf('async function syncWebdav(');
@@ -143,7 +173,7 @@ test('settings sync failure returns partial state and renderer refreshes save st
   assert.match(flow,/else if\(!result\?\.cancelled\)\{await refreshSnapshotIndex\(true\);renderLibrary\(\);if\(editorId\)await renderBackupList\(\);\}/);
 });
 
-test('upload animation belongs to item retry; settings and immediate backup do not animate snapshot rows', () => {
+test('item retry and immediate backup show upload animation; settings sync does not animate snapshot rows', () => {
   const renderer = fs.readFileSync(path.join(__dirname, '../app/renderer.js'), 'utf8');
   const itemStart = renderer.indexOf('async function syncSnapshotButton(');
   const itemEnd = renderer.indexOf('\nasync function deleteSelectedSnapshots', itemStart);
@@ -154,9 +184,10 @@ test('upload animation belongs to item retry; settings and immediate backup do n
   const backupStart = renderer.indexOf('async function backupCurrentSaves()');
   const backupEnd = renderer.indexOf('\nfunction webdavSyncPreviewContent', backupStart);
   const backupFlow = renderer.slice(backupStart, backupEnd);
-  assert.match(itemFlow, /classList\.add\('uploading'\)/);
+  assert.match(itemFlow, /setSnapshotUploadProgress\(itemId,backupId,true\)/);
+  assert.match(itemFlow, /classList\.toggle\('uploading',uploading\)/);
   assert.match(itemFlow, /'item-retry'/);
-  assert.doesNotMatch(settingsFlow, /syncSnapshotButton|classList\.add\('uploading'\)/);
-  assert.doesNotMatch(backupFlow, /classList\.add\('uploading'\)/);
+  assert.doesNotMatch(settingsFlow, /syncSnapshotButton|setSnapshotUploadProgress/);
+  assert.match(backupFlow, /setSnapshotUploadProgress\(itemId,result\.snapshotId,true\)/);
   assert.match(backupFlow, /'immediate-backup'/);
 });

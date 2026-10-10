@@ -20,7 +20,7 @@ function infoRows(html) {
 }
 function infoField(rows,...labels) {for(const label of labels){const row=rows.find(row=>new RegExp('^'+label+'\\s*[:：]').test(row));if(row)return row.replace(new RegExp('^'+label+'\\s*[:：]\\s*'),'');}return '';}
 function uniqueRecords(entries) {const seen=new Set();return arr(entries).filter(entry=>{const id=String(entry.id||entry.storeUrl||'');if(!id||seen.has(id))return false;seen.add(id);return true;});}
-function createSourceSearch({json,text,settings=()=>({}),pace=350,sourceHome=()=>'',sourceVerified=()=>false,renderHtml=async()=>({html:'',finalUrl:''}),diagnostics=()=>{},bookSourceEndpoints=null}) {
+function createSourceSearch({json,text,settings=()=>({}),pace=350,sourceHome=()=>'',sourceVerified=()=>false,renderHtml=async()=>({html:'',finalUrl:''}),diagnostics=()=>{},bookSourceEndpoints=null,completeCovers=null}) {
   const slots=new Map(),inflight=new Map();
   const detailProviders=createProviders({json:(url,timeout,options)=>json(url,timeout,options),text:(url,timeout)=>text(url,timeout)});
   function diagnosticContext(sourceId,mediaType,operation,query=''){
@@ -112,7 +112,7 @@ function createSourceSearch({json,text,settings=()=>({}),pace=350,sourceHome=()=
     const entries=await raw.jikanSearch(query,type);
     const candidates=entries.map(entry=>({...entry,ratingSource:'MyAnimeList',ratingMax:10,identifiers:{mal:entry.providerId},editionKind:type==='manga'?'系列':''}));candidates.forEach(emit);return candidates;
   }
-  async function search(type,query,{onProgress}={}) {
+  async function search(type,query,{onProgress,sourceIds}={}) {
     query=String(query||'').trim();if(!query)return {integrated:[],sources:[]};
     const key=Symbol(type+query);
     const task=(async()=>{
@@ -126,12 +126,13 @@ function createSourceSearch({json,text,settings=()=>({}),pace=350,sourceHome=()=
       if(type==='anime'||type==='manga')add('kitsu','Kitsu',(io,q)=>require('./public-media-sources').kitsu(io,q,type));
       if(type==='movie'||type==='anime')add('seedhub','SeedHub',(io,q)=>require('./seedhub-metadata').search(io,q,type));
       if(type==='movie')add('wikidata','Wikidata',require('./public-media-sources').wikidata);
+      const selectedIds=Array.isArray(sourceIds)?new Set(sourceIds.map(String)):null,activeSpecs=selectedIds?specs.filter(spec=>selectedIds.has(spec.id)):specs;
       const sourceUrl=spec=>spec.searchUrl?spec.searchUrl(query,sourceHome(spec.id)):'';
-      const sources=specs.map(spec=>({id:spec.id,label:spec.label,items:[],state:'loading',message:'正在获取…',...(spec.searchUrl?{searchUrl:sourceUrl(spec)}:{})}));
+      const sources=activeSpecs.map(spec=>({id:spec.id,label:spec.label,items:[],state:'loading',message:'正在获取…',...(spec.searchUrl?{searchUrl:sourceUrl(spec)}:{})}));
       // Never briefly publish a novel as a manga while waiting for type proof.
       const visibleSources=()=>sources.map(source=>source.id==='douban'&&type==='manga'?{...source,items:source.items.filter(entry=>/漫画|マンガ|comic|manga/i.test([entry.name,...arr(entry.genres)].join(' '))||sources.find(s=>s.id==='bangumi')?.items.some(other=>norm(other.developer)&&norm(other.developer)===norm(entry.developer)&&norm(other.name)===norm(entry.name)))}:source);
       const publish=()=>{Runtime.check();const visible=visibleSources();onProgress?.({type,query,integrated:mergeMetadata(visible,type,primaryFor(type,settings())),sources:structuredClone(visible),loading:true});};publish();
-      await Promise.all(specs.map(async(spec,index)=>{
+      await Promise.all(activeSpecs.map(async(spec,index)=>{
         const result=await runSource(spec.id,spec.label,type,query,spec.run,items=>{sources[index].items=items;publish();});
         sources[index]={...result,...(spec.searchUrl?{searchUrl:sourceUrl(spec)}:{})};publish();
       }));
@@ -139,12 +140,12 @@ function createSourceSearch({json,text,settings=()=>({}),pace=350,sourceHome=()=
       // not a local dictionary of presumed translations.
       const aliases=unique(sources.flatMap(source=>source.items.filter(entry=>relevance(entry,query)===100).slice(0,2).flatMap(entry=>[entry.originalName,...arr(entry.aliases)]))).filter(name=>norm(name)!==norm(query)&&name.length>2).sort((a,b)=>Number(/^[\x00-\x7f’]+$/.test(b))-Number(/^[\x00-\x7f’]+$/.test(a))).slice(0,2);
       await Promise.all(sources.filter(source=>aliases.length&&!source.items.length&&source.state==='empty'&&['myanimelist','anilist','kitsu','tvmaze','itunes','openlibrary'].includes(source.id)).map(async source=>{
-        const spec=specs.find(spec=>spec.id===source.id);
+        const spec=activeSpecs.find(spec=>spec.id===source.id);
         source.state='loading';publish();for(const alias of aliases){const extra=await runSource(source.id,source.label,type,alias,spec.run,items=>{source.items=items;publish();});source.requests=(source.requests||0)+extra.requests;Object.assign(source,extra);publish();if(extra.items.length)break;}
       }));
       if(publication){
         // A manga adaptation is not the source novel, even with an identical title.
-        if(type==='manga'){const douban=sources.find(source=>source.id==='douban'),known=sources.find(source=>source.id==='bangumi').items;douban.items=douban.items.filter(entry=>/漫画|マンガ|comic|manga/i.test([entry.name,...arr(entry.genres)].join(' '))||known.some(other=>norm(other.developer)&&norm(other.developer)===norm(entry.developer)&&norm(other.name)===norm(entry.name)));if(!douban.items.length&&douban.state==='ok'){douban.state='empty';douban.message='没有确认属于漫画类型的匹配条目。';}}
+        if(type==='manga'){const douban=sources.find(source=>source.id==='douban'),known=sources.find(source=>source.id==='bangumi')?.items||[];if(douban)douban.items=douban.items.filter(entry=>/漫画|マンガ|comic|manga/i.test([entry.name,...arr(entry.genres)].join(' '))||known.some(other=>norm(other.developer)&&norm(other.developer)===norm(entry.developer)&&norm(other.name)===norm(entry.name)));if(douban&&!douban.items.length&&douban.state==='ok'){douban.state='empty';douban.message='没有确认属于漫画类型的匹配条目。';}}
       }
       const primary=primaryFor(type,settings());
       const integrated=mergeMetadata(sources,type,primary).sort((a,b)=>relevance(b,query)-relevance(a,query)||Number(b._sourceId===primary)-Number(a._sourceId===primary)||Number(cn(b.name))-Number(cn(a.name))||['isbn','pages','translator','description','cover'].filter(key=>b[key]).length-['isbn','pages','translator','description','cover'].filter(key=>a[key]).length);
@@ -208,7 +209,7 @@ function createSourceSearch({json,text,settings=()=>({}),pace=350,sourceHome=()=
     const type=candidate.mediaType||candidate.type||'game',sourceId=candidate._sourceId||candidate.sourceId||'';
     const resolveObserved=async(seed,id)=>{const context=diagnosticContext(id,type,'resolve',seed?.name||''),started=Date.now();context.log({phase:'source.start',verified:context.verified});try{const value=await resolveSingle(seed,id,type,context),failed=Boolean(value?.detailsUnavailable);context.log({phase:failed?'source.empty':'source.success',status:failed?'details-unavailable':'ok',durationMs:Date.now()-started,requestCount:context.requestCount,resultCount:failed?0:1});return value;}catch(error){context.log({phase:'source.failed',status:'failed',durationMs:Date.now()-started,requestCount:context.requestCount,resultCount:0,errorName:error?.name||'Error',errorMessage:error?.message||''});throw error;}};
     let base=await resolveObserved(candidate,sourceId);
-    if(!candidate.integrated||!Array.isArray(candidate._matchedCandidates)||!candidate._matchedCandidates.length)return base;
+    if(!candidate.integrated||!Array.isArray(candidate._matchedCandidates)||!candidate._matchedCandidates.length)return completeCovers?await completeCovers(base,candidate):base;
     const needs=type==='game'?['description','developer','publisher','releaseDate','externalRating','cover']:['book','manga'].includes(type)?['description','genres','isbn','publisher','translator','releaseDate','pages','cover']:['description','cast','episodes','developer','externalRating','cover'];
     for(const match of candidate._matchedCandidates){
       if(needs.every(key=>Array.isArray(base[key])?base[key].length:base[key]))break;
@@ -218,7 +219,7 @@ function createSourceSearch({json,text,settings=()=>({}),pace=350,sourceHome=()=
       const merged=mergeMetadata([{id:sourceId,items:[base]},{id:match.sourceId,items:[extra]}],type,sourceId);
       const next=merged.find(row=>String(row.id)===String(base.id));if(next)base=next;
     }
-    const output={...base};delete output._matchedCandidates;delete output._sourceId;return output;
+    const output=completeCovers?await completeCovers(base,candidate):{...base};delete output._matchedCandidates;delete output._sourceId;return output;
   }
   return {search,resolveCandidate};
 }

@@ -1,7 +1,7 @@
 /* List rows are a separate layout: no cover overlays or genre clutter. */
 function smallCardHtml(item) {
   return '<article class="resource-card small-card" draggable="true" data-id="'+esc(item.id)+'" data-media-type="'+esc(item.type)+'" data-achievement="'+(item.type==='game'&&item.status==='全成就')+'">'+
-    '<div class="card-cover">'+cardImage(item,coverDirectionForLayout(item,'small'))+'</div>'+
+    '<div class="card-cover">'+cardImage(item,coverDirectionForLayout(item,'small'))+(item.type==='game'?'<div class="card-identifiers">'+cardPlatformIcons(item)+'</div>':'')+'</div>'+
     '<div class="card-body"><div class="card-title" title="'+esc(item.name)+'">'+esc(item.name)+'</div><div class="small-card-status">'+cardStatusMarkup(item)+'</div></div></article>';
 }
 
@@ -9,9 +9,9 @@ function listCardHtml(item) { return buildListCard(item); }
 
 function renderPlatformPicker() {
   const host=$('gamePlatforms');if(!host)return;
-  const selected=PlatformModel.detect({...editorMetadata,storeUrl:valueFor('fieldStoreUrl'),steamAppId:valueFor('fieldSteamAppId')});
-  host.querySelectorAll('[data-platform-option]').forEach(button=>button.setAttribute('aria-pressed',String(selected.includes(button.dataset.platformOption))));
-  $('platformSelectionHint').textContent=selected.length?(editorMetadata.platformsManual?'已手动确认':'已联网识别 / 按链接识别'):'未指定 · 可多选';
+  const item={...editorMetadata,storeUrl:valueFor('fieldStoreUrl'),steamAppId:valueFor('fieldSteamAppId')},selected=PlatformModel.detect(item);
+  host.querySelectorAll('[data-platform-option]').forEach(button=>{const value=PlatformModel.state(item,button.dataset.platformOption),description=PlatformModel.labels[button.dataset.platformOption]+'：'+({unchecked:'未点击',release:'发行平台',played:'我玩过'})[value];button.dataset.platformState=value;button.setAttribute('aria-pressed',String(value!=='unchecked'));button.setAttribute('aria-label',description);button.title=description;});
+  $('platformSelectionHint').textContent=selected.length?(editorMetadata.fieldSources?.platforms==='手动'?'已手动调整':'已联网识别 / 按链接识别'):'未指定';
 }
 function installPlatformPicker() {
   const host=$('gamePlatformOptions');
@@ -19,9 +19,8 @@ function installPlatformPicker() {
     const button=document.createElement('button');button.type='button';button.dataset.platformOption=key;button.setAttribute('aria-pressed','false');
     button.innerHTML=PlatformModel.icons({platforms:[key]})+'<span>'+esc(label)+'</span>';
     button.onclick=()=>{
-      const values=PlatformModel.detect({...editorMetadata,storeUrl:valueFor('fieldStoreUrl'),steamAppId:valueFor('fieldSteamAppId')});
-      editorMetadata.platforms=values.includes(key)?values.filter(value=>value!==key):[...values,key];
-      editorMetadata.platformsManual=true;editorMetadata.fieldSources={...editorMetadata.fieldSources,platforms:'手动'};
+      const next=PlatformModel.cycle({...editorMetadata,storeUrl:valueFor('fieldStoreUrl'),steamAppId:valueFor('fieldSteamAppId')},key);
+      Object.assign(editorMetadata,next);editorMetadata.fieldSources={...editorMetadata.fieldSources,platforms:'手动'};
       renderPlatformPicker();updateTypeFields();updateEditorSaveCue(true,'gamePlatforms');
     };host.appendChild(button);
   }

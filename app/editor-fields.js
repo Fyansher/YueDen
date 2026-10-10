@@ -86,7 +86,7 @@ function openResourcePathMenu(clearOnly, event) {
   field.setAttribute('aria-expanded', 'true'); menu.querySelector('button:not(:disabled)')?.focus({ preventScroll: true });
 }
 function renderMetadataCoverage(candidate = {}) {
-  editorMetadata = { originalName:candidate.originalName||'',aliases:candidate.aliases||[],identifiers:candidate.identifiers||{},steamPlaytime:candidate.steamPlaytime??null,steamPlaytimeAt:candidate.steamPlaytimeAt||'',playtimeSource:candidate.playtimeSource||'',metadataSource: candidate.metadataSource || '', fieldSources: candidate.fieldSources || {}, editionKind: candidate.editionKind || '', ratingSource: candidate.ratingSource || RatingModel.source(candidate, $('fieldType').value), ratingValue: candidate.ratingValue ?? null, ratingMax: candidate.ratingMax ?? null, ratingEdited: Boolean(candidate.ratingEdited), platforms: PlatformModel.detect(candidate), platformsManual: Boolean(candidate.platformsManual), platformLinks: candidate.platformLinks || {} };
+  editorMetadata = { originalName:candidate.originalName||'',aliases:candidate.aliases||[],identifiers:candidate.identifiers||{},steamPlaytime:candidate.steamPlaytime??null,steamPlaytimeAt:candidate.steamPlaytimeAt||'',playtimeSource:candidate.playtimeSource||'',metadataSource: candidate.metadataSource || '', fieldSources: candidate.fieldSources || {}, editionKind: candidate.editionKind || '', ratingSource: candidate.ratingSource || RatingModel.source(candidate, $('fieldType').value), ratingValue: candidate.ratingValue ?? null, ratingMax: candidate.ratingMax ?? null, ratingEdited: Boolean(candidate.ratingEdited), platforms: PlatformModel.detect(candidate), playedPlatforms:PlatformModel.normalizeMany(candidate.playedPlatforms), platformsExplicit:Boolean(candidate.platformsExplicit), platformsManual: Boolean(candidate.platformsManual), platformLinks: candidate.platformLinks || {} };
   const type = $('fieldType').value;
   const hint = $('metadataCoverage'); hint.classList.toggle('hidden', !candidate.metadataSource);
   hint.textContent = candidate.metadataSource || '';
@@ -112,28 +112,49 @@ function installTextAreaResize() {
 function renderTagStatusFilters() {
   let section = $('tagStatusFilters');
   if (!section) { section = document.createElement('section'); section.id = 'tagStatusFilters'; section.className = 'tag-status-section'; $('categoryGrid').before(section); }
-  const previous = document.activeElement?.dataset.statusValue;
-  const selection = resourceFilters.selected('statusFilter')[0];
-  if (selection && !selection.startsWith('phase:')) { resourceFilters.values.statusFilter.clear(); resourceFilters.values.statusFilter.add('phase:' + StatusModel.stage(selection)); }
-  const candidates = state.items.filter(item => resourceFilters.matches(item, ['statusFilter']));
-  section.innerHTML = '<div class="status-section-heading"><strong>条目状态</strong></div><div class="tag-status-options" role="radiogroup" aria-label="条目状态"></div>';
+  const previousStatus = document.activeElement?.dataset.statusValue, previousTagKind = document.activeElement?.dataset.tagKind;
+  const candidates = visibleResourceItems().filter(item => resourceFilters.matches(item, ['statusFilter']));
+  section.innerHTML = '<div class="tag-status-options" role="group" aria-label="资源筛选"></div>';
   const host = section.querySelector('.tag-status-options');
-  for (const [phase, label] of [['all', '全部状态'], ...Object.entries(StatusModel.stages)]) {
-    const value = phase === 'all' ? 'all' : 'phase:' + phase;
-    const selected = value === 'all' ? !resourceFilters.selected('statusFilter').length : resourceFilters.selected('statusFilter').includes(value);
-    const count = phase === 'all' ? candidates.length : candidates.filter(item => item.type!=='audio'&&StatusModel.stage(item.status) === phase).length;
+  const labels = { pending: '未开始', active: '进行中', completed: '已完成', dropped: '已弃坑' }, icons = { pending: '○', active: '◔', completed: '✓', dropped: '−' };
+  for (const [phase] of Object.entries(StatusModel.stages)) {
+    const value = 'phase:' + phase, label = labels[phase] || StatusModel.stages[phase];
+    const selected = resourceFilters.selected('statusFilter').includes(value);
+    const count = candidates.filter(item => StatusModel.stage(StatusModel.normalize(item.status,item.type)) === phase).length;
+    if (!count && !selected) continue;
     const button = document.createElement('button'); button.type = 'button'; button.dataset.statusValue = value; button.dataset.statusPhase = phase;
+    button.dataset.statusLabel = label;
     button.className = 'status-filter-button' + (selected ? ' selected' : '');
-    button.setAttribute('role','radio'); button.setAttribute('aria-checked',String(selected)); button.setAttribute('aria-pressed',String(selected));
-    button.textContent = label + ' · ' + count; button.disabled = phase !== 'all' && !count && !selected;
-    button.onclick = () => { if (value === 'all') resourceFilters.values.statusFilter.clear(); else resourceFilters.toggle('statusFilter',value); renderCategories(); };
+    button.setAttribute('aria-pressed', String(selected));
+    button.innerHTML = '<span class="tag-filter-icon" aria-hidden="true">' + (icons[phase] || '•') + '</span><span>' + label + '</span><small class="tag-filter-count">' + count + '</small>';
+    button.disabled = !count && !selected;
+    button.onclick = () => { const values = resourceFilters.values.statusFilter; selected ? values.delete(value) : values.add(value); renderCategories(); };
     host.appendChild(button);
   }
+  const masteredValue='special:mastered',masteredSelected=resourceFilters.selected('statusFilter').includes(masteredValue),masteredCount=candidates.filter(item=>item.type==='game'&&StatusModel.phase(StatusModel.normalize(item.status,item.type))==='mastered').length;
+  if(masteredCount||masteredSelected){const button=document.createElement('button');button.type='button';button.dataset.statusValue=masteredValue;button.dataset.statusLabel='全成就';button.className='status-filter-button'+(masteredSelected?' selected':'');button.setAttribute('aria-pressed',String(masteredSelected));button.innerHTML='<span class="tag-filter-icon" aria-hidden="true">★</span><span>全成就</span><small class="tag-filter-count">'+masteredCount+'</small>';button.disabled=!masteredCount&&!masteredSelected;button.onclick=()=>{const values=resourceFilters.values.statusFilter;masteredSelected?values.delete(masteredValue):values.add(masteredValue);renderCategories();};host.appendChild(button);}
+  for (const [kind, label, icon] of [['category', '分类', '▤'], ['genre', '标签', '#']]) {
+    const button = document.createElement('button'); button.type = 'button'; button.dataset.tagKind = kind;
+    const selected = tagKinds.has(kind);
+    button.className = 'status-filter-button tag-kind-toggle' + (selected ? ' selected' : '');
+    button.setAttribute('aria-pressed', String(selected));
+    button.innerHTML = '<span class="tag-filter-icon" aria-hidden="true">' + icon + '</span><span>' + label + '</span>';
+    button.onclick = () => { if (selected) tagKinds.delete(kind); else tagKinds.add(kind); renderCategories(); };
+    host.appendChild(button);
+  }
+  const auxiliaryFilters=[];
+  for(const value of resourceFilters.selected('platformFilter')){const [key,state]=value.split(':');auxiliaryFilters.push({id:'platformFilter',value,label:(PlatformModel.labels[key]||key)+(state==='played'?' · 我玩过':' · 平台')});}
+  for(const value of resourceFilters.selected('yearFilter'))auxiliaryFilters.push({id:'yearFilter',value,label:value+' 年'});
+  for(const value of resourceFilters.selected('ratingFilter'))auxiliaryFilters.push({id:'ratingFilter',value,label:value==='unrated'?'未评分':value+' 星'});
+  if(resourceFilters.hasCompletion())auxiliaryFilters.push({id:'completion',value:'completion',label:resourceFilters.completionLabel()});
+  for(const filter of auxiliaryFilters){const button=document.createElement('button');button.type='button';button.className='selected-filter-chip tag-auxiliary-filter';button.dataset.filter=filter.id;button.dataset.value=filter.value;button.textContent=filter.label+' ×';button.setAttribute('aria-label','取消筛选：'+filter.label);button.onclick=()=>{if(filter.id==='completion')resourceFilters.completion={mode:'range',from:'',to:'',on:''};else resourceFilters.values[filter.id].delete(filter.value);renderCategories();};host.appendChild(button);}
   host.onkeydown = event => {
     if (!['ArrowRight','ArrowDown','ArrowLeft','ArrowUp'].includes(event.key)) return;
     const buttons = [...host.querySelectorAll('button:not(:disabled)')], index = buttons.indexOf(document.activeElement); if (index < 0) return;
     event.preventDefault(); const next = buttons[(index + (['ArrowRight','ArrowDown'].includes(event.key) ? 1 : buttons.length - 1)) % buttons.length]; next.click();
-    [...section.querySelectorAll('[data-status-value]')].find(button => button.dataset.statusValue === next.dataset.statusValue)?.focus({ preventScroll: true });
+    const statusValue = next.dataset.statusValue, tagKindValue = next.dataset.tagKind;
+    requestAnimationFrame(() => [...section.querySelectorAll('button')].find(button => statusValue ? button.dataset.statusValue === statusValue : button.dataset.tagKind === tagKindValue)?.focus({ preventScroll: true }));
   };
-  if (previous) [...host.children].find(button => button.dataset.statusValue === previous)?.focus({ preventScroll: true });
+  if (previousStatus) [...host.children].find(button => button.dataset.statusValue === previousStatus)?.focus({ preventScroll: true });
+  else if (previousTagKind) [...host.children].find(button => button.dataset.tagKind === previousTagKind)?.focus({ preventScroll: true });
 }

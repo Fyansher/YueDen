@@ -37,9 +37,11 @@
 #librarySearchHeader .add-button { white-space:nowrap; }
 #libraryHeading { padding:4px 8px; border:0; background:none; }
 #libraryGrid,#categoryGrid { scrollbar-gutter:stable; }
-#filters { margin:0 13px 10px 5px; padding:8px 10px; align-items:center; flex-wrap:nowrap; }
-#multiFilterControls { flex:1; min-width:0; gap:6px; flex-wrap:wrap; }
-#activeFilterChips { display:none; }
+#filters { margin:0 13px 10px 5px; padding:8px 10px; align-items:center; flex-wrap:wrap; }
+#multiFilterControls { flex:1 1 0; min-width:0; gap:6px; flex-wrap:wrap; order:1; }
+#filters > #clearFilters { order:2; margin-left:auto; }
+#activeFilterChips { display:flex; flex:0 0 100%; order:3; }
+#activeFilterChips:empty { display:none; }
 .completion-filter .filter-options { left:0; right:auto; }
 #filters,#filters * { animation:none!important; }
 #batchDelete { color:#f07379!important; }
@@ -65,3 +67,59 @@
 
 #batchSelectAll { max-width:none; flex:none; padding:6px 8px; overflow:visible; }
 .library-grid .resource-card { animation:none; }
+
+/* Keep tag management on the same compact toolbar and use the shared library sort control. */
+#categoriesView .tag-tools { display:flex; align-items:center; justify-content:flex-start; flex-wrap:nowrap; gap:8px; min-width:0; margin:0 13px 8px 5px; }
+#categoriesView .tag-search { flex:1 1 360px; width:auto; min-width:150px; max-width:none; }
+#categoriesView .tag-tools.tag-tools-natural .tag-search { flex:1 1 150px; width:auto; min-width:130px; }
+#categoriesView .tag-sort { flex:none; margin-left:0!important; }
+#categoriesView .tag-tools.tag-tools-natural .tag-sort { margin-left:0!important; }
+#categoriesView .tag-tools.tag-tools-natural #tagSelectionTools { margin-left:auto; }
+#tagStatusFilters { display:flex; align-items:center; gap:0; margin:0 13px 8px 5px; padding:10px 12px; }
+#tagStatusFilters .tag-status-options { display:flex; align-items:center; flex-wrap:wrap; gap:8px; width:100%; }
+#tagStatusFilters .status-filter-button { display:inline-flex; align-items:center; justify-content:center; gap:7px; min-height:32px; padding:6px 10px; border:1px solid var(--line); border-radius:8px; background:var(--panel-2); color:var(--muted); font-size:12px; line-height:1; white-space:nowrap; transition:background .2s,border-color .2s,color .2s,transform .2s; }
+#tagStatusFilters .status-filter-button:hover:not(:disabled) { border-color:color-mix(in srgb,var(--accent) 55%,transparent); color:var(--text); }
+#tagStatusFilters .status-filter-button.selected { border-color:var(--accent); background:color-mix(in srgb,var(--accent) 15%,var(--panel)); color:var(--accent); }
+#tagStatusFilters .status-filter-button:active:not(:disabled) { transform:scale(.96); }
+#tagStatusFilters .status-filter-button:disabled { opacity:.4; cursor:not-allowed; }
+.tag-filter-icon { display:inline-grid; place-items:center; min-width:13px; color:currentColor; font-size:13px; font-weight:650; }
+.tag-filter-count { min-width:13px; color:var(--muted-2); font-size:10px; font-variant-numeric:tabular-nums; text-align:right; }
+#tagStatusFilters .tag-kind-toggle[data-tag-kind="category"] { margin-left:auto; }
+#tagStatusFilters .tag-kind-toggle { min-width:76px; }
+#tagSelectionTools { display:flex; align-items:center; justify-content:flex-end; gap:0; flex:none; min-width:0; margin:0; padding:0; }
+#tagSelectionTools .tag-selection-count { margin-right:7px; color:var(--muted); font-size:11px; white-space:nowrap; }
+#tagSelectionTools .tag-selection-actions { display:flex; align-items:center; gap:6px; }
+#tagSelectionTools #deleteTagSelection { flex:none; }
+#tagSelectionTools #deleteTagSelection.is-disabled { opacity:.42; cursor:default; }
+#tagSelectionTools #deleteTagSelection:hover:not(:disabled),#tagSelectionTools #deleteTagSelection.drag-delete-over { opacity:1; color:#ff9ca1!important; background:rgba(232,74,88,.16); border-color:rgba(232,74,88,.42); }
+#tagSelectionTools #deleteTagSelection.drag-delete-over { transform:none; box-shadow:inset 0 0 0 1px currentColor; }
+#categoryGrid .tag-card { position:relative; display:block; min-height:112px; overflow:visible; padding:0; }
+#categoryGrid .tag-card-main { display:flex; flex-direction:column; align-items:flex-start; justify-content:flex-start; box-sizing:border-box; width:100%; min-height:112px; margin:0; padding:16px 48px 15px 17px; float:none; border:0; border-radius:inherit; background:transparent; color:var(--text); font:inherit; line-height:1.4; text-align:left; white-space:normal; overflow:visible; cursor:pointer; }
+#categoryGrid .tag-card-main .tag-kind { display:block; flex:none; margin:0 0 6px; color:var(--accent); font-size:10px; line-height:1.3; }
+#categoryGrid .tag-card-main strong { display:block; flex:none; width:100%; min-width:0; max-width:100%; overflow:visible; overflow-wrap:anywhere; word-break:normal; white-space:normal; line-height:1.35; }
+#categoryGrid .tag-card-main small { display:block; flex:none; width:100%; margin-top:auto; padding-top:7px; color:var(--muted); font-size:11px; line-height:1.4; white-space:normal; overflow-wrap:anywhere; }
+#categoryGrid .tag-card-select { position:absolute; top:9px; right:9px; z-index:2; display:grid; place-items:center; width:23px; height:23px; margin:0; cursor:pointer; }
+#categoryGrid .tag-card-select input { position:absolute; inset:0; width:100%; height:100%; margin:0; opacity:0; cursor:pointer; }
+#categoryGrid .tag-card-select span { display:grid; place-items:center; width:20px; height:20px; border:1.5px solid #dde7e6; border-radius:6px; background:#152b36e6; box-shadow:0 1px 5px #0005; transition:background .16s,border-color .16s,transform .18s cubic-bezier(.2,1.35,.35,1); pointer-events:none; }
+#categoryGrid .tag-card-select:hover span { border-color:var(--accent); background:color-mix(in srgb,var(--accent) 14%,#152b36e6); }
+#categoryGrid .tag-card-select input:active+span { transform:scale(.94); }
+#categoryGrid .tag-card-select input:checked+span { border-color:var(--accent); background:var(--accent); color:#102323; }
+#categoryGrid .tag-card-select input:checked+span::after { content:""; width:8px; height:4px; border:solid currentColor; border-width:0 0 2px 2px; transform:translateY(-1px) rotate(-45deg); }
+#categoryGrid .tag-card-select input:focus-visible+span { outline:2px solid var(--text); outline-offset:1px; }
+#categoryGrid .tag-card.management-selected { border-color:color-mix(in srgb,var(--accent) 65%,var(--line)); }
+#categoryGrid .tag-card.dragging { opacity:.55; cursor:grabbing; }
+#categoryGrid .tag-card.drag-over { outline:2px solid var(--accent); outline-offset:2px; }
+#categoryGrid .tag-card-main { cursor:grab; }
+#categoryGrid .tag-card-main:active { cursor:grabbing; }
+#categoryGrid.is-painting,#categoryGrid.is-painting * { user-select:none; cursor:crosshair!important; }
+@media(prefers-reduced-motion:reduce){#categoryGrid .tag-card-select span{transition:none}#categoryGrid .tag-card-select:hover span,#categoryGrid .tag-card-select input:active+span{transform:none!important}}
+@media(max-width:900px) {
+ #categoriesView .tag-tools { flex-wrap:wrap; gap:8px; }
+ #categoriesView .tag-tools .tag-search { flex:1 1 170px; min-width:130px; }
+ #categoriesView .tag-tools:not(.tag-tools-natural) .tag-search { flex:1 1 170px; width:auto; }
+ #categoriesView .tag-tools .tag-sort { margin-left:0!important; }
+ #tagSelectionTools { margin-left:auto; }
+ #tagStatusFilters { padding:9px; }
+ #tagStatusFilters .tag-status-options { gap:6px; }
+ #tagStatusFilters .tag-kind-toggle[data-tag-kind="category"] { margin-left:4px; }
+}

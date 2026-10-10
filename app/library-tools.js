@@ -27,7 +27,49 @@ async function refreshResources(ids){
  showToast((job.cancelled?'已停止：':'补全结束：')+filled+' 个资源 / '+fields+' 个字段，'+unchanged+' 个无可补充数据'+(items.length-targets.length?'，保护跳过 '+(items.length-targets.length):'')+(failed?'，请求失败 '+failed:''),failed?'error':'normal');
  }finally{if(librarySelection.refreshJob===job){librarySelection.refreshJob=null;$('batchProgress').classList.add('hidden');renderLibrarySelection();}}
 }
-let steamSyncTimer,steamSyncBusy=false,steamSyncRevision=0;
+function openBatchSaveDialog(){
+ if(librarySelection.mutation||$('batchSaveDialog'))return;
+ const ids=visibleSelectionIds(),items=state.items.filter(item=>ids.includes(item.id)),games=items.filter(item=>item.type==='game');
+ if(!games.length){showToast('所选资源中没有游戏条目');return;}
+ const backdrop=document.createElement('div');backdrop.id='batchSaveDialog';backdrop.className='app-dialog-backdrop';
+ backdrop.innerHTML='<section class="app-dialog batch-save-dialog"><div class="app-dialog-head"><strong>批量存档操作</strong><button type="button" class="app-dialog-close" aria-label="关闭">×</button></div><p>对选中的 '+games.length+' 个游戏选择一项操作。获取路径只填入空白路径；备份只使用已设置的位置，并在配置 WebDAV 时自动上传。</p><div class="app-dialog-actions"><button type="button" class="secondary-button app-dialog-cancel">取消</button><button type="button" class="secondary-button" data-save-action="detect">获取路径</button><button type="button" class="add-button" data-save-action="backup">备份</button></div></section>';
+ document.body.appendChild(backdrop);const close=()=>appModalStack.remove(backdrop);appModalStack.open(backdrop,close);backdrop.querySelector('.app-dialog-close').onclick=close;backdrop.querySelector('.app-dialog-cancel').onclick=close;backdrop.onclick=event=>{if(event.target===backdrop)close();};
+ backdrop.querySelectorAll('[data-save-action]').forEach(button=>button.onclick=()=>{const mode=button.dataset.saveAction;close();void runBatchSaveOperation(games.map(item=>item.id),mode);});
+}
+async function runBatchSaveOperation(ids,mode){
+ if(librarySelection.saveJob||librarySelection.mutation)return;
+ const job={cancelled:false,mode};librarySelection.saveJob=job;librarySelection.mutation=true;let success=0,skipped=0,failed=0,pendingUpload=0;
+ const items=structuredClone(state.items.filter(item=>ids.includes(item.id)&&item.type==='game'));
+ $('batchProgress').classList.remove('hidden');$('batchProgress').classList.add('is-saving');renderLibrarySelection();
+ try{
+  for(let index=0;index<items.length;index++){
+   if(job.cancelled)break;const original=items[index];
+   $('batchProgressText').textContent=(mode==='detect'?'获取路径 ':'备份存档 ')+(index+1)+' / '+items.length+' · '+original.name;
+   try{
+    const live=state.items.find(item=>item.id===original.id);if(!live){skipped++;continue;}
+    if(mode==='detect'){
+     if((live.savePaths||[]).some(Boolean)){skipped++;continue;}
+     const result=await native.detectSavePaths(live);if(!result?.ok){skipped++;continue;}
+     if(result.status==='manual-preserved'||!result.paths?.length){skipped++;continue;}
+     const saved=await native.persistSavePaths(live.id,result.paths);if(!saved?.ok)throw Error(saved?.message||'存档路径无法保存');
+     state={...state,items:state.items.map(item=>item.id===live.id?saved.item:item)};success++;renderLibrary();
+    }else{
+     const paths=(live.savePaths||[]).filter(Boolean);if(!paths.length){skipped++;continue;}
+     const result=await native.backupSaves(live.id,paths,{gameName:live.name});if(!result?.ok)throw Error(result?.message||'本地存档备份失败');
+     const updated={...live,backupCount:(Number(live.backupCount)||0)+1,lastBackupAt:result.createdAt};state=await native.saveLibrary({...state,items:state.items.map(item=>item.id===live.id?updated:item)});success++;renderLibrary();
+     if(settings.webdavUrl&&result.snapshotId){$('batchProgressText').textContent='上传存档 '+(index+1)+' / '+items.length+' · '+original.name;const upload=await native.syncBackupSnapshot(live.id,result.snapshotId,settings,'immediate-backup');if(!upload?.ok)pendingUpload++;}
+    }
+   }catch(error){failed++;console.error('批量存档操作失败',original.name,error);}
+  }
+  if(mode==='detect')showToast((job.cancelled?'已停止：':'获取路径完成：')+'成功 '+success+' 个，跳过 '+skipped+' 个，失败 '+failed+' 个',failed?'error':'normal');
+  else showToast((job.cancelled?'已停止：':'存档备份完成：')+'成功 '+success+' 个，缺少路径/跳过 '+skipped+' 个，失败 '+failed+' 个'+(pendingUpload?'，云同步待重试 '+pendingUpload+' 个':''),failed||pendingUpload?'error':'normal');
+ }finally{
+  librarySelection.saveJob=null;librarySelection.mutation=false;$('batchProgress').classList.add('hidden');$('batchProgress').classList.remove('is-saving');
+  if(mode==='backup'){await refreshSnapshotIndex(false);if(snapshotCardMode())renderLibrary();if(editorId)await renderBackupList();}
+  renderLibrarySelection();
+ }
+}
+ let steamSyncTimer,steamSyncBusy=false,steamSyncRevision=0;
 function scheduleSteamSync(){clearTimeout(steamSyncTimer);++steamSyncRevision;steamSyncTimer=setTimeout(()=>syncSteamHours(),1200);}
 async function syncSteamHours(){
  const revision=steamSyncRevision,host=$('steamSyncStatus');if(steamSyncBusy||!host)return;

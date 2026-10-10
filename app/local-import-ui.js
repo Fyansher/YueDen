@@ -1,6 +1,6 @@
 /* Per-library roots; scanning is read-only, writing requires an explicit import. */
 let localImportSession=null;
-async function saveLocalLibrary(next){const saved=await native.saveLibrary(next);if(settings.disguiseEnabled){disguiseOriginalState=saved;applyDisguise({enabled:true,profile:settings.disguiseProfile});}else state=saved;return saved;}
+async function saveLocalLibrary(next){const saved=await native.saveLibrary(next);if(settings.disguiseEnabled){disguiseOriginalState=saved;applyDisguise({enabled:true});}else state=saved;return saved;}
 function localRoots(type){return settings.localResourceRoots?.[type]||(type==='game'?settings.localScanPaths||[]:[]);}
 function decorateLocalCards(){
  const button=$('localResourcesBtn');if(button){button.classList.toggle('hidden',!['audio','game','movie','anime','manga','book'].includes(activeView)||document.body.classList.contains('is-disguised')||activeView==='audio'&&window.audioBrowser?.view==='playlists');button.textContent='▱ 导入'+(TYPE_NAMES[activeView]||'资源');}

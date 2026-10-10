@@ -3,8 +3,11 @@ const path = require('path');
 const ipcMain=require('./ipc-guard').create(rawIpcMain,__dirname);
 const fs = require('fs');
 const {randomBytes,randomUUID,createHash}=require('node:crypto');
+const {Readable}=require('node:stream');
+const {pipeline}=require('node:stream/promises');
 const webdavDiagnosticModule=require('./webdav-diagnostic-log'),webdavDiagnosticLog=webdavDiagnosticModule.create(()=>app.getPath('userData'),()=>{const packageInfo=require('./package.json'),version=app.getVersion?.()||packageInfo.version;return {appVersion:version,buildId:process.env.YUEDEN_BUILD_ID||packageInfo.buildId||version,schemaVersion:require('./webdav-state').SYNC_SCHEMA_VERSION};});
 const metadataDiagnosticLog=require('./metadata-diagnostic-log').create({directory:()=>path.join(app.getPath('userData'),'logs'),appVersion:app.getVersion?.()||require('./package.json').version,buildId:process.env.YUEDEN_BUILD_ID||require('./package.json').buildId||require('./package.json').version});
+const steamRequestPolicy=require('./steam-request-policy').create({onDiagnostic:row=>metadataDiagnosticLog.write(row)});
 let webdavOperationSignal=null;
 const webdavProtocol=require('./webdav-client'),webdavClient=webdavProtocol.create({operationSignal:()=>webdavOperationSignal,onDiagnostic:row=>webdavDiagnosticLog.write(row)});
 const webdavTestClient=webdavProtocol.create({timeout:4000,onDiagnostic:row=>webdavDiagnosticLog.write(row)});
@@ -38,7 +41,7 @@ const MetadataRuntime = require('./metadata-runtime');
 const { createGameSources, gameTerms } = require('./game-sources');
 const renderMetadataHtml=require('./metadata-render-service').create({readRenderedDom:(...args)=>metadataVerificationWindow.readRenderedDom(...args),sourceLocations:metadataSourceLocations,network:MetadataNetwork,runtime:MetadataRuntime,fetchText:(...args)=>fetchMetadataText(...args)});
 const bookSourceEndpoints=require('./book-source-endpoints').create({file:()=>path.join(app.getPath('userData'),'book-source-endpoints.json'),fetchText:(url,timeout)=>fetchMetadataText(url,timeout,'')});
-const gameSources = createGameSources({json:(...args)=>fetchMetadataJson(...args),text:(...args)=>fetchMetadataText(...args),steam:(query,emit)=>metadataSearchSteam('game',query,emit),aliases:query=>gameSearchTerms(query).map(term=>term.replace(/ WINDOWS EDITION$/i,'')),settings:loadSettings,diagnostics:row=>metadataDiagnosticLog.write(row)});
+const gameSources = createGameSources({json:(...args)=>fetchMetadataJson(...args),text:(...args)=>fetchMetadataText(...args),steam:(query,emit)=>metadataSearchSteam('game',query,emit),aliases:query=>gameSearchTerms(query).map(term=>term.replace(/ WINDOWS EDITION$/i,'')),settings:loadSettings,diagnostics:row=>metadataDiagnosticLog.write(row),completeCovers:completeMetadataCovers});
 const sourceSearch = createSourceSearch({
   json: (url,timeout,options,sourceId) => fetchMetadataJson(url,timeout,options,sourceId),
   text: (url,timeout,sourceId,diagnosticContext) => fetchMetadataText(url,timeout,sourceId,diagnosticContext),
@@ -47,13 +50,15 @@ const sourceSearch = createSourceSearch({
   renderHtml:renderMetadataHtml,
   bookSourceEndpoints,
   settings: loadSettings,
-  diagnostics:row=>metadataDiagnosticLog.write(row)
+  diagnostics:row=>metadataDiagnosticLog.write(row),
+  completeCovers:completeMetadataCovers
 });
 const { pathToFileURL } = require('node:url');
 protocol?.registerSchemesAsPrivileged([{ scheme: 'um-cover', privileges: { standard: true, secure: true, supportFetchAPI: true } },{scheme:'um-audio',privileges:{standard:true,secure:true,supportFetchAPI:true,stream:true,corsEnabled:true}},{scheme:'um-media',privileges:{standard:true,secure:true,supportFetchAPI:true,stream:true,corsEnabled:true}}]);
 const coverStore = new CoverStore(() => path.join(app.getPath('userData'), 'cover-cache'), nativeImage);
 const coverUrlCache=require('./cover-url-cache').createCoverUrlCache(coverStore);
 const candidateCoverCache = require('./candidate-covers').createCandidateCovers({request:requestImageOverHttps,compact:value=>coverStore.compact(value),dimensions:reference=>coverStore.dimensions(reference),...coverUrlCache});
+const steamArtworkCache=new Map();
 
 // Unified Manager is intentionally portable: data lives beside the executable.
 const executableRoot = path.dirname(process.execPath);
@@ -75,13 +80,8 @@ const initialSettings = {
   metadataPrimarySourceByType: { game:'steam', movie:'douban', anime:'bangumi', manga:'bangumi', book:'douban' },
   webdavUrl: '', webdavUsername: '', webdavPassword: '', webdavRemotePath: 'YueDen', lastWebdavSyncAt: '',
   appearance: { theme: 'ocean', accent: '#65d8b0', density: 'comfortable', animations: true, defaultView: 'dashboard' },
-  disguiseEnabled: false, disguiseProfile: 'course', disguiseVideoUrl: '', confirmBeforeDelete: true, deleteCloudSaveWithLocal: true,
+  disguiseEnabled: false, disguiseVideoUrl: '', positiveEnergyEnabled: false, confirmBeforeDelete: true, deleteCloudSaveWithLocal: true,
   localScanPaths: [], refreshWhitelist: [], autoRefreshMetadata: true,
-};
-const DISGUISE_PROFILES = {
-  course: { label: '课程播放器', title: '在线视频课程 - 学习中心' },
-  reader: { label: '资料阅读器', title: '资料阅读器 - 学习中心' },
-  notes: { label: '课堂笔记', title: '课堂笔记 - 学习中心' },
 };
 async function openDisguiseVideo(query, index = 0) {
   const payload = await fetchJson(`https://api.bilibili.com/x/web-interface/search/type?search_type=video&keyword=${encodeURIComponent(query || '学习资料')}&page=1&page_size=10`, 7000);
@@ -137,7 +137,7 @@ function normaliseItem(item, index = 0) {
     ratingSource: value.ratingSource || RatingModel.source(value, value.type),
     ratingValue: value.ratingValue !== null && value.ratingValue !== undefined && value.ratingValue !== '' && Number.isFinite(Number(value.ratingValue)) ? Number(value.ratingValue) : null,
     ratingMax: Number(value.ratingMax) > 0 ? Number(value.ratingMax) : null,
-    ratingEdited: Boolean(value.ratingEdited), platforms: PlatformModel.detect(value), platformsManual: Boolean(value.platformsManual), platformLinks: value.platformLinks || {},
+    ratingEdited: Boolean(value.ratingEdited), platforms: PlatformModel.detect(value), playedPlatforms:PlatformModel.normalizeMany(value.playedPlatforms), platformsExplicit:Boolean(value.platformsExplicit), platformsManual: Boolean(value.platformsManual), platformLinks: value.platformLinks || {},
     categories: Array.isArray(value.categories) ? value.categories.filter(Boolean) : [],
     noteUrl: value.noteUrl || value.obsidianUri || '',
     resourceUrl: value.resourceUrl || value.watchUrl || value.readUrl || '',
@@ -281,8 +281,34 @@ async function materializeCandidateCovers(entry, raw = '', index = 0, cache = ne
   return {cover,coverPortrait,coverLandscape,...(orientation?{coverOrientation:orientation}:{}),...(typeof entry.coverShared==='boolean'?{coverShared:entry.coverShared}:{}),hasOnlineCover:Object.values(original).some(value=>/^(https?:\/\/|data:image\/(?!svg))/i.test(value||'')),networkCovers};
 }
 
+async function inspectMetadataCover(url){
+  if(!/^https:\/\//i.test(String(url||'')))return null;
+  const cached=candidateCoverCache.cached(url);
+  if(cached){const dimensions=coverStore.dimensions(cached);if(dimensions?.width>0&&dimensions?.height>0)return {sourceUrl:url,reference:cached,dimensions};}
+  const image=await requestImageOverHttps(url,3200,MetadataRuntime.signal());MetadataRuntime.check();if(!image)return null;
+  const reference=coverStore.compact(image),dimensions=coverStore.dimensions(reference);
+  if(!(dimensions?.width>0&&dimensions?.height>0))return null;
+  coverUrlCache.remember(url,reference);return {sourceUrl:url,reference,dimensions};
+}
+
+async function completeMetadataCovers(entry,seed={}){
+  if(!entry||typeof entry!=='object')return entry;
+  const CoverCompletion=require('./cover-completion'),SteamLibraryArt=require('./steam-library-art'),matches=seed._matchedCandidates||entry._matchedCandidates||[],primaryId=String(seed._sourceId||seed.sourceId||entry._sourceId||''),extras=[];
+  const steamMatch=matches.some(match=>match?.sourceId==='steam'||match?.candidate?._sourceId==='steam'),steamRelevant=primaryId==='steam'||steamMatch||/\bSteam\b/i.test(String(entry.metadataSource||''));
+  const appid=String(seed.steamAppId||entry.steamAppId||matches.find(match=>match?.sourceId==='steam')?.candidate?.steamAppId||matches.find(match=>match?.sourceId==='steam')?.candidate?.id||'');
+  const portraitUrls=steamRelevant&&/^\d+$/.test(appid)?await steamLibraryPortraits(appid):[];
+  for(const portrait of portraitUrls)extras.push({coverPortrait:portrait,metadataSource:'Steam',fieldSources:{coverPortrait:'Steam'},_sourceId:'steam'});
+  const currentPortrait=String(entry.networkCovers?.coverPortrait||entry.coverPortrait||''),legacyPortrait=/^\d+$/.test(appid)&&SteamLibraryArt.legacyPortraitAppId(currentPortrait)===appid;
+  // When a legacy Steam URL is present, let verified current assets compete
+  // from an empty slot; keep the old value only if no usable replacement wins.
+  const base=legacyPortrait&&portraitUrls.length?{...entry,coverPortrait:'',fieldSources:{...(entry.fieldSources||{})}}:entry;
+  const result=await CoverCompletion.complete(base,matches,inspectMetadataCover,extras);
+  if(legacyPortrait&&portraitUrls.length&&!result.coverPortrait&&entry.coverPortrait){result.coverPortrait=entry.coverPortrait;result.fieldSources={...(result.fieldSources||{}),...(entry.fieldSources?.coverPortrait?{coverPortrait:entry.fieldSources.coverPortrait}:{})};}
+  return result;
+}
+
 async function fetchJson(url, timeoutMs = 10000, options = {}) {
-  return MetadataRuntime.cached('json:'+url+':'+(options.body||''),()=>require('./steam-request-policy').run(url,()=>fetchJsonUncached(url,timeoutMs,options)),{accept:value=>value!==null&&!value?.errors&&!value?.error});
+  return MetadataRuntime.cached('json:'+url+':'+(options.body||''),()=>steamRequestPolicy.run(url,()=>fetchJsonUncached(url,timeoutMs,options)),{accept:value=>value!==null&&!value?.errors&&!value?.error});
 }
 async function fetchJsonUncached(url, timeoutMs = 10000, options = {}) {
   // Storefronts use Chromium's Windows proxy/trust path directly. Do not spend
@@ -309,7 +335,7 @@ async function fetchJsonUncached(url, timeoutMs = 10000, options = {}) {
 }
 
 async function fetchText(url, timeoutMs = 10000) {
-  return MetadataRuntime.cached('text:'+url,()=>require('./steam-request-policy').run(url,()=>fetchTextUncached(url,timeoutMs),''),{accept:value=>Boolean(value)&&!/cf-chl-|Just a moment|机器人验证|访问异常/i.test(value)});
+  return MetadataRuntime.cached('text:'+url,()=>steamRequestPolicy.run(url,()=>fetchTextUncached(url,timeoutMs),''),{accept:value=>Boolean(value)&&!/cf-chl-|Just a moment|机器人验证|访问异常/i.test(value)});
 }
 async function fetchTextUncached(url, timeoutMs = 10000) {
   if(new URL(url).hostname.toLowerCase()==='zh.zlib.bz'){
@@ -341,7 +367,7 @@ async function fetchTextUncached(url, timeoutMs = 10000) {
 async function fetchMetadataJson(url, timeoutMs = 10000, options = {}, sourceId = '') {
   url=metadataSourceLocations.rewrite(sourceId,url);
   const key = 'metadata-json:'+url+':'+(options.method||'GET')+':'+(options.body||'')+':'+JSON.stringify(options.headers||{});
-  return MetadataRuntime.cached(key,()=>require('./steam-request-policy').run(url,()=>fetchMetadataJsonUncached(url,timeoutMs,options)),{accept:value=>value!==null&&!value?.errors&&!value?.error});
+  return MetadataRuntime.cached(key,()=>steamRequestPolicy.run(url,()=>fetchMetadataJsonUncached(url,timeoutMs,options)),{accept:value=>value!==null&&!value?.errors&&!value?.error});
 }
 async function fetchMetadataJsonUncached(url, timeoutMs = 10000, options = {}) {
   if (/(?:^|\.)(?:playstation\.com|egdata\.app|nintendo\.(?:com|jp)|nintendo-europe\.com|bgm\.tv|douban\.com|tvmaze\.com|jikan\.moe|openlibrary\.org|anilist\.co|itunes\.apple\.com|wikidata\.org|kitsu\.io|googleapis\.com)$/.test(new URL(url).hostname)) {
@@ -359,7 +385,7 @@ async function fetchMetadataJsonUncached(url, timeoutMs = 10000, options = {}) {
 }
 async function fetchMetadataText(url, timeoutMs = 10000, sourceId = '', diagnosticContext = null) {
   url=metadataSourceLocations.rewrite(sourceId,url);
-  return MetadataRuntime.cached('metadata-text:'+url,()=>require('./steam-request-policy').run(url,()=>fetchMetadataTextUncached(url,timeoutMs,sourceId,diagnosticContext),''),{accept:value=>Boolean(value)&&!MetadataNetwork.isVerificationPage(value)});
+  return MetadataRuntime.cached('metadata-text:'+url,()=>steamRequestPolicy.run(url,()=>fetchMetadataTextUncached(url,timeoutMs,sourceId,diagnosticContext),''),{accept:value=>Boolean(value)&&!MetadataNetwork.isVerificationPage(value)});
 }
 async function fetchMetadataTextUncached(url, timeoutMs = 10000, sourceId = '', diagnosticContext = null) {
   const parsed=new URL(url),headers={Accept:'text/html,*/*'};
@@ -438,34 +464,41 @@ async function cachedSteamGame(appid) {
   if(steamGameCache.size>600)steamGameCache.delete(steamGameCache.keys().next().value);
   return result;
 }
-async function steamPagedSearch(query, country = 'cn', start = 0) {
+async function steamPagedSearch(query, country = 'hk', start = 0) {
   const page=await fetchJson('https://store.steampowered.com/search/results/?term='+encodeURIComponent(query)+'&category1=998&start='+Math.max(0,Number(start)||0)+'&count=50&infinite=1&l=schinese&cc='+country,9000);
   const rows=[...(page?.results_html||'').matchAll(/<a\b[^>]*data-ds-appid="(\d+)"[^>]*>([\s\S]*?)<\/a>/g)];
   return rows.map(match=>({id:match[1],name:MetadataText.text(match[2].match(/<span[^>]*class="title"[^>]*>([\s\S]*?)<\/span>/)?.[1]||''),tiny_image:match[2].match(/<img[^>]*src="([^"]+)"/i)?.[1]||''}));
 }
-async function steamSearch(query,emit=()=>{}) {
-  const encoded = encodeURIComponent(query);
+async function steamSearch(query,emit=()=>{},usFallbackBudget={used:false}) {
   const found=new Map(),publish=async records=>{
     for(const row of records||[]){const id=String(row.id||row.appid||'');if(!/^\d+$/.test(id)||!row.name)continue;const name=MetadataText.text(row.name),old=found.get(id);found.set(id,old?{...row,...old,id,name:old.name||name,tiny_image:old.tiny_image||row.tiny_image||''}:{...row,id,name});}
-    const ordered=SteamSearchResults.preserveCandidateOrder([...found.values()]).map(row=>({id:row.id,steamAppId:row.id,name:row.name,aliases:row.aliases||[],cover:row.tiny_image||'',coverLandscape:row.tiny_image||'',coverPortrait:'https://cdn.akamai.steamstatic.com/steam/apps/'+encodeURIComponent(row.id)+'/library_600x900.jpg',type:'game',platforms:['steam'],storeUrl:'https://store.steampowered.com/app/'+encodeURIComponent(row.id)+'/',metadataSource:'Steam',ratingSource:'Steam'}));
+    const ordered=SteamSearchResults.preserveCandidateOrder([...found.values()]).map(row=>({id:row.id,steamAppId:row.id,name:row.name,aliases:row.aliases||[],cover:row.tiny_image||'',coverLandscape:row.tiny_image||'',type:'game',platforms:['steam'],storeUrl:'https://store.steampowered.com/app/'+encodeURIComponent(row.id)+'/',metadataSource:'Steam',ratingSource:'Steam'}));
     if(ordered.length)emit(ordered);return ordered;
   };
-  let ordered=await publish(await steamSuggestSearch(query));
-  if(ordered.length)return ordered;
-  const store=await fetchJson('https://store.steampowered.com/api/storesearch/?term='+encoded+'&l=schinese&cc=cn',7000);
-  ordered=await publish(store?.items||[]);
-  if(ordered.length)return ordered;
-  const community=await fetchJson('https://steamcommunity.com/actions/SearchApps/'+encoded,7000);
-  ordered=await publish(Array.isArray(community)?community.map(item=>({id:item.appid,name:item.name})):[]);
-  if(ordered.length)return ordered;
-  ordered=await publish(await steamPagedSearch(query));
-  if(!ordered.length)ordered=await publish(await steamPagedSearch(query,'cn',50));
+  const hasRelevant=items=>items.some(entry=>steamRelevance(entry,query)>=80);
+  const searchRegion=async country=>{
+    const suggestions=await steamSuggestSearch(query,country).catch(()=>[]);
+    let ordered=await publish(suggestions);
+    // Suggestions are the fast path. Only fetch the region's full results page
+    // when suggestions did not return a sufficiently relevant game.
+    if(!hasRelevant(ordered)){
+      try{ordered=await publish(await steamPagedSearch(query,country));}
+      catch{MetadataRuntime.check();}
+    }
+    return ordered;
+  };
+  let ordered=await searchRegion('hk');
+  if(hasRelevant(ordered)||usFallbackBudget.used)return ordered;
+  // Keep HK candidates visible while allowing one US supplement across all
+  // title aliases in this search.
+  usFallbackBudget.used=true;
+  ordered=await searchRegion('us');
   return ordered;
 }
 
 function decodeSteamHtml(value) { return String(value || '').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;|&#x27;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>'); }
-async function steamSuggestSearch(query) {
-  const html = await fetchText(`https://store.steampowered.com/search/suggest?term=${encodeURIComponent(query)}&f=games&cc=CN&l=schinese`, 7000).catch(() => '');
+async function steamSuggestSearch(query,country='hk') {
+  const html = await fetchText(`https://store.steampowered.com/search/suggest?term=${encodeURIComponent(query)}&f=games&cc=${String(country).toUpperCase()}&l=schinese`, 7000).catch(() => '');
   if (!html) return [];
   const list = []; const re = /<a[^>]*data-ds-appid="(\d+)"[^>]*>[\s\S]*?<div class="match_name">([\s\S]*?)<\/div>[\s\S]*?<img[^>]*src="([^"]+)/gi; let match;
   while ((match = re.exec(html)) && list.length < 10) list.push({ id: match[1], name: decodeSteamHtml(match[2].replace(/<[^>]+>/g, '').trim()), tiny_image: match[3] });
@@ -488,6 +521,18 @@ async function steamAppDetailsBatch(appids) {
 async function steamAppDetails(appid) {
   return (await steamAppDetailsBatch([appid])).get(String(appid))||null;
 }
+async function steamLibraryPortraits(appid){
+  const id=String(appid||'');if(!/^\d{1,12}$/.test(id))return [];
+  const cached=steamArtworkCache.get(id);if(cached?.promise)return cached.promise;if(cached&&cached.expires>Date.now())return cached.urls|| (cached.url?[cached.url]:[]);
+  const promise=(async()=>{try{
+    const SteamLibraryArt=require('./steam-library-art'),url=SteamLibraryArt.requestUrl(id);if(!url)return [];
+    const response=await fetchJson(url,6500),urls=SteamLibraryArt.portraitCandidates(response,id).get(id)||[];
+    steamArtworkCache.set(id,{url:urls[0]||'',urls,expires:Date.now()+(urls.length?60*60_000:2*60_000)});
+    while(steamArtworkCache.size>500)steamArtworkCache.delete(steamArtworkCache.keys().next().value);
+    return urls;
+  }catch{MetadataRuntime.check();steamArtworkCache.set(id,{url:'',urls:[],expires:Date.now()+2*60_000});return [];}})();
+  steamArtworkCache.set(id,{promise,expires:Date.now()+8000});return promise;
+}
 async function steamByAppId(appid,knownDetail=null) {
   const detail = knownDetail || await steamAppDetails(appid);
   if (!detail || String(detail.type||'').toLowerCase() !== 'game' || /\b(demo|soundtrack|season pass|expansion pass|mod organizer|resolution pack|benchmark)\b|扩充通票|原声带|试玩版/i.test(detail.name || '')) return [];
@@ -497,7 +542,6 @@ async function steamByAppId(appid,knownDetail=null) {
     name: detail.name || `Steam ${appid}`,
     cover: detail.header_image || '',
     coverLandscape: detail.header_image || '',
-    coverPortrait: `https://cdn.akamai.steamstatic.com/steam/apps/${encodeURIComponent(appid)}/library_600x900.jpg`,
     genres: (detail.genres || []).map((genre) => genre.description),
     developer: (detail.developers || []).join('、'),
     publisher: (detail.publishers || []).join('、'),
@@ -505,7 +549,7 @@ async function steamByAppId(appid,knownDetail=null) {
     steamRating: reviewLabel,
     externalRating: reviewLabel,
     ratingSource: review.ratingSource, ratingValue: review.ratingValue, ratingMax: review.ratingMax,
-    fieldSources: { name:'Steam',description:'Steam',developer:'Steam',publisher:'Steam',releaseDate:'Steam',genres:'Steam',cover:'Steam',coverPortrait:'Steam',coverLandscape:'Steam',externalRating:'Steam',storeUrl:'Steam',platforms:'Steam',steamAppId:'Steam' },
+    fieldSources: { name:'Steam',description:'Steam',developer:'Steam',publisher:'Steam',releaseDate:'Steam',genres:'Steam',cover:'Steam',coverLandscape:'Steam',externalRating:'Steam',storeUrl:'Steam',platforms:'Steam',steamAppId:'Steam' },
     playtime: hours,steamPlaytime:hours,playtimeSource:hours===null?'':'Steam',
     metadataSource: 'Steam',
     storeUrl: `https://store.steampowered.com/app/${appid}/`,
@@ -577,12 +621,13 @@ async function metadataSearchSteam(type, query, emit=()=>{}) {
     if (type === 'game') {
       const appid = raw.match(/^appid:(\d+)$/i)?.[1];
       if (appid) {
-        results=[{id:appid,steamAppId:appid,name:'Steam AppID '+appid,coverPortrait:'https://cdn.akamai.steamstatic.com/steam/apps/'+encodeURIComponent(appid)+'/library_600x900.jpg',platforms:['steam'],storeUrl:'https://store.steampowered.com/app/'+appid+'/',metadataSource:'Steam',ratingSource:'Steam'}];
+        results=[{id:appid,steamAppId:appid,name:'Steam AppID '+appid,platforms:['steam'],storeUrl:'https://store.steampowered.com/app/'+appid+'/',metadataSource:'Steam',ratingSource:'Steam'}];
         emit(results);
       } else {
         const terms=gameSearchTerms(raw),partial=new Map(),publish=entries=>{for(const entry of entries||[]){const id=String(entry?.id||entry?.steamAppId||'');if(/^\d+$/.test(id)&&entry?.name&&!partial.has(id))partial.set(id,{...entry,id});}emit([...partial.values()]);};
+        const usFallbackBudget={used:false};
         for(const term of terms.slice(0,3)){
-          const batch=await steamSearch(term,publish).catch(error=>{MetadataRuntime.check();return [];});
+          const batch=await steamSearch(term,publish,usFallbackBudget).catch(error=>{MetadataRuntime.check();return [];});
           publish(batch);results=[...partial.values()].slice(0,40);
           if(results.length)break;
         }
@@ -599,7 +644,7 @@ async function metadataSearch(type,query){return (await metadataSearchSources(ty
 async function metadataSearchSources(type,query,options={}) {
   MetadataRuntime.check();query=String(query||'').trim().slice(0,240);
   if(!query)return {integrated:[],sources:[],loading:false};
-  if(type==='game'&&/^appid:\d+$/i.test(query)){
+  if(type==='game'&&/^appid:\d+$/i.test(query)&&(!Array.isArray(options.sourceIds)||options.sourceIds.includes('steam'))){
     const context={runId:randomUUID(),sourceId:'steam',mediaType:'game',operation:'search',query,queryLength:query.length},started=Date.now();metadataDiagnosticLog.write({...context,phase:'source.start',verified:false});
      try{const items=await metadataSearchSteam(type,query),bundle={integrated:items,sources:[{id:'steam',label:'Steam',items,state:items.length?'ok':'empty'}],loading:false};options.onProgress?.(bundle);metadataDiagnosticLog.write({...context,phase:items.length?'source.success':'source.empty',status:items.length?'ok':'empty',durationMs:Date.now()-started,requestCount:1,resultCount:items.length,verified:false});return bundle;}
     catch(error){metadataDiagnosticLog.write({...context,phase:'source.failed',status:'failed',durationMs:Date.now()-started,requestCount:1,resultCount:0,errorName:error?.name||'Error',errorMessage:error?.message||''});throw error;}
@@ -626,7 +671,7 @@ async function resolveMetadataCandidate(candidate) {
     if(candidate.integrated&&Array.isArray(candidate._matchedCandidates)&&candidate._matchedCandidates.length){
       const merged=await SteamCandidateResolution.resolveOrKeep(resolved,()=>gameSources.resolveCandidate?.(resolved));
       resolved=merged.value;
-    }
+    }else resolved=await completeMetadataCovers(resolved,candidate);
     return resolved;
   }
   if(candidate.mediaType==='game'||candidate.type==='game')return await gameSources.resolveCandidate?.(candidate)||candidate;
@@ -641,10 +686,45 @@ async function scanLocalGames(paths) {
 
 async function refreshItemMetadata(item) {
   if(!['game','movie','anime','manga','book'].includes(item.type||'game'))return item;
-  const candidates=await metadataSearch(item.type||'game',item.type==='game'&&/^\d+$/.test(String(item.steamAppId||''))?'appid:'+item.steamAppId:item.name||'');
-  const candidate=refreshMatch(item,candidates);if(!candidate)return item;
-  const detail=await resolveMetadataCandidate(candidate);if(!detail)return item;
-  const next=require('./local-model').fillMissing(item,detail);for(const key of ['steamRating','externalRating','steamPositivePercent','ratingSource','ratingValue','ratingMax'])if(detail[key]!==undefined&&detail[key]!==null&&detail[key]!=='')next[key]=detail[key];
+  const type=item.type||'game',appid=String(item.steamAppId||''),query=String(item.name||'').trim()||(type==='game'&&/^\d+$/.test(appid)?'appid:'+appid:'');
+  const settings=loadSettings(),defaults={game:'steam',movie:'douban',anime:'bangumi',manga:'bangumi',book:'douban'},available={game:['steam','bangumi','nintendo','playstation','epic','dlsite'],movie:['douban','bangumi','tvmaze','itunes','seedhub','wikidata'],anime:['bangumi','douban','myanimelist','anilist','kitsu','seedhub'],manga:['douban','bangumi','openlibrary','googlebooks','myanimelist','anilist','kitsu'],book:['douban','bangumi','openlibrary','googlebooks','tstrs','onelib','zlibrary']};
+  const configured=String(settings?.metadataPrimarySourceByType?.[type]||defaults[type]),primary=available[type].includes(configured)?configured:defaults[type],sourceIds=[primary];
+  if(type==='game'&&!item.platformsManual&&primary!=='bangumi'&&!/^appid:\d+$/i.test(query))sourceIds.push('bangumi');
+  const bundle=await metadataSearchSources(type,query,{sourceIds}),candidate=refreshMatch(item,bundle?.integrated||[]);if(!candidate)return item;
+  let detail=await resolveMetadataCandidate(candidate);if(!detail)return item;
+  if(type==='game'&&!item.platformsManual&&!candidate._matchedCandidates?.some(match=>match?.sourceId==='bangumi')){
+    const bangumiCandidate=refreshMatch(item,bundle?.sources?.find(source=>source.id==='bangumi')?.items||[]);
+    if(bangumiCandidate){try{const extra=await resolveMetadataCandidate(bangumiCandidate);if(extra){const platforms=[...new Set([...PlatformModel.detect(detail),...PlatformModel.detect(extra)])];if(platforms.length>PlatformModel.detect(detail).length){detail={...detail,platforms,fieldSources:{...(detail.fieldSources||{}),platforms:extra.fieldSources?.platforms||extra.metadataSource||'Bangumi'}};}}}catch{MetadataRuntime.check();}}
+  }
+  if(type!=='game'){
+    const present=value=>Array.isArray(value)?value.length>0:value!==null&&value!==undefined&&value!=='';
+    const plans={
+      movie:[{id:(detail.scope||item.scope)==='series'?'tvmaze':'itunes',fields:(detail.scope||item.scope)==='series'?['cast','episodes','developer','description']:['description','genres','releaseDate']},{id:'wikidata',fields:['cast','developer','publisher','releaseDate','genres']}],
+      anime:[{id:'anilist',fields:['description','developer','cast','episodes','genres','releaseDate']}],
+      manga:[{id:'anilist',fields:['description','genres','releaseDate']}],
+      book:[{id:'googlebooks',fields:['isbn','pages','publisher','description','releaseDate','genres']}]
+    }[type]||[];
+    const LocalModel=require('./local-model');
+    for(const plan of plans){
+      if(plan.id===primary)continue;
+      const needed=plan.fields.filter(key=>!present(item[key])&&!present(detail[key]));if(!needed.length)continue;
+      try{
+        const supplement=await metadataSearchSources(type,query,{sourceIds:[plan.id]}),match=refreshMatch(item,supplement?.integrated||[]);if(!match)continue;
+        const extra=await resolveMetadataCandidate(match);if(!extra)continue;
+        const before={...detail},merged=LocalModel.fillMissing(detail,extra);merged.fieldSources={...(detail.fieldSources||{})};let filled=false;
+        for(const key of needed)if(!present(before[key])&&present(merged[key])){merged.fieldSources[key]=extra.fieldSources?.[key]||extra.metadataSource||plan.id;filled=true;}
+        if(filled){merged.metadataSource=[...new Set([...String(detail.metadataSource||'').split(/\s+\+\s+/),...String(extra.metadataSource||'').split(/\s+\+\s+/)].filter(Boolean))].join(' + ');detail=merged;}
+      }catch{MetadataRuntime.check();}
+    }
+  }
+  const next=require('./local-model').fillMissing(item,detail),SteamLibraryArt=require('./steam-library-art');
+  next.playedPlatforms=PlatformModel.normalizeMany(item.playedPlatforms);
+  if((item.type||'game')==='game'&&!item.platformsManual){next.platforms=[...new Set([...PlatformModel.detect(item),...PlatformModel.detect(detail)])];next.platformsExplicit=false;}
+  const existingPortrait=String(item.networkCovers?.coverPortrait||item.coverPortrait||''),legacySteamPortrait=/^\d+$/.test(appid)&&SteamLibraryArt.legacyPortraitAppId(existingPortrait)===appid;
+  if(legacySteamPortrait&&detail.coverPortrait&&!SteamLibraryArt.legacyPortraitAppId(detail.coverPortrait)){
+    next.coverPortrait=detail.coverPortrait;next.networkCovers={...(next.networkCovers||{}),coverPortrait:/^https?:\/\//i.test(detail.networkCovers?.coverPortrait||detail.coverPortrait)?(detail.networkCovers?.coverPortrait||detail.coverPortrait):''};
+  }
+  for(const key of ['steamRating','externalRating','steamPositivePercent','ratingSource','ratingValue','ratingMax'])if(detail[key]!==undefined&&detail[key]!==null&&detail[key]!=='')next[key]=detail[key];
   const changed=Object.keys(next).filter(key=>JSON.stringify(next[key])!==JSON.stringify(item[key]));
   if(!changed.length)return item;next.fieldSources={...item.fieldSources};
   for(const key of changed)next.fieldSources[key]=detail.fieldSources?.[key]||detail.metadataSource||'';
@@ -653,6 +733,7 @@ async function refreshItemMetadata(item) {
 
 function backupRoot() { return path.join(app.getPath('userData'), 'save-backups'); }
 const saveSnapshots = require('./save-snapshots').create(backupRoot());
+let savePathManifestPromise=null,savePathManifestLoadedAt=0;
 const saveSyncIndexFile=()=>path.join(app.getPath('userData'),'save-backup-sync.json');
 function readSaveSyncStore(){try{const value=JSON.parse(fs.readFileSync(saveSyncIndexFile(),'utf8'));return value&&typeof value==='object'?value:{schemaVersion:2,endpoints:{}}}catch{return {schemaVersion:2,endpoints:{}}}}
 function currentSaveEndpointKey(settings=loadSettings()){try{return webdavSyncEndpointKey(settings)}catch{return ''}}
@@ -677,6 +758,14 @@ function listFiles(root) {
   return result;
 }
 async function backupSaves(itemId, paths, options = {}) { return require('./save-backup-sync').createLocalSnapshot(()=>saveSnapshots.backup(itemId,paths,options),async result=>{const entry=saveSnapshots.list(itemId).find(row=>row.folder===result.folder);result.snapshotId=entry?.id||'';try{if(entry)updateCachedLocalSaveCatalog({upsert:[entry]});else invalidateLocalSaveCatalog();}catch(error){webdavDiagnosticLog.write({event:'webdav.save-catalog.local-refresh.failed',operation:'save-backup',phase:'local-snapshot-created',error});}}); }
+async function discoverSavePaths(item){
+  const detector=require('./save-path-discovery');
+  if(Array.isArray(item?.savePaths)&&item.savePaths.some(value=>String(value||'').trim()))return detector.resolveSavePaths(item);
+  if(!savePathManifestPromise||Date.now()-savePathManifestLoadedAt>6*60*60*1000){savePathManifestLoadedAt=Date.now();savePathManifestPromise=detector.loadManifest(path.join(app.getPath('userData'),'save-path-database')).catch(error=>{savePathManifestPromise=null;throw error;});}
+  const text=await savePathManifestPromise;
+  return detector.resolveSavePaths(item,{manifestText:text,documents:app.getPath('documents'),registryRoots:detector.steamRegistryRoots()});
+}
+const persistSavePaths=require('./save-path-persistence').create({loadLibrary,normaliseItem,writeJson,dataFile});
 function decorateBackup(entry,stored,index){const synced=index[entry.id]?.manifestHash===entry.manifestHash;return {...entry,syncStatus:synced?'已同步':(stored.webdavUrl?'待同步':'未配置云同步'),syncedAt:synced?index[entry.id].at:''};}
 function listBackups(itemId) {
   const stored=loadSettings(),index=readSaveSyncIndex(currentSaveEndpointKey(stored));
@@ -684,25 +773,105 @@ function listBackups(itemId) {
 }
 function listAllBackups(){const stored=loadSettings(),index=readSaveSyncIndex(currentSaveEndpointKey(stored));return saveSnapshots.listAll(loadLibrary().items).map(entry=>decorateBackup(entry,stored,index));}
 async function restoreBackup(itemId, backupId) { return saveSnapshots.restore(itemId, backupId); }
+async function restoreRemoteBackup(settings,itemId,backupId){
+  const catalog=await readRemoteSaveCatalog(settings);if(!catalog)throw Error('云端没有存档索引');
+  const row=catalog.catalog.entries.find(entry=>entry.id===backupId);if(!row)throw Error('云端存档不存在或已删除');
+  const manifest=await readRemoteSnapshotManifest(settings,row);if(!manifest||String(manifest.itemId||'')!==String(itemId))throw Error('云端存档不属于当前游戏');
+  const current=loadLibrary().items.find(item=>item.id===itemId);if(!current)throw Error('游戏条目不存在');
+  let paths=Array.isArray(current.savePaths)?current.savePaths.filter(Boolean):[];
+  if(!paths.length){const detected=await discoverSavePaths(current);if(!detected.ok)throw Error(detected.message||'此设备尚未设置存档位置');paths=detected.paths;const saved=persistSavePaths(itemId,paths);if(!saved.ok)throw Error(saved.message);}
+  const deviceId=syncDeviceId(),entries=manifest.entries||[];
+  if(!entries.length)throw Error('云端存档清单没有可恢复内容');
+  const mappedTargets=new Array(entries.length),usedTargets=new Set();
+  for(let index=0;index<entries.length;index++){
+    const devicePath=entries[index].sourceByDevice?.[deviceId];if(devicePath){mappedTargets[index]=devicePath;usedTargets.add(path.resolve(devicePath).toLowerCase());}
+  }
+  if(paths.length!==entries.length&&mappedTargets.some(value=>!value))throw Error(`此快照包含 ${entries.length} 个存档位置，但本机配置了 ${paths.length} 个；请在游戏条目中调整路径后重试`);
+  for(let index=0;index<entries.length;index++){
+    if(mappedTargets[index])continue;
+    const label=String(entries[index].target||'').replace(/^\d+-/,'').toLocaleLowerCase();
+    const matches=paths.filter(value=>!usedTargets.has(path.resolve(value).toLowerCase())&&path.basename(value).toLocaleLowerCase()===label);
+    if(matches.length===1)mappedTargets[index]=matches[0];
+  }
+  for(let index=0;index<entries.length;index++){
+    if(mappedTargets[index])continue;
+    const remaining=paths.filter(value=>!usedTargets.has(path.resolve(value).toLowerCase()));
+    if(entries.filter((_entry,i)=>!mappedTargets[i]).length===1&&remaining.length===1)mappedTargets[index]=remaining[0];
+  }
+  const mapped=entries.map((entry,index)=>{
+    const target=mappedTargets[index];if(!target||!path.isAbsolute(target))throw Error('无法安全匹配此快照的多个存档位置；请在编辑器中按原备份目录名称设置对应位置');
+    usedTargets.add(path.resolve(target).toLowerCase());
+    return {...entry,source:target,sourceByDevice:{...(entry.sourceByDevice||{}),[deviceId]:target}};
+  });
+  const refs=require('./webdav-save-catalog').objectRefs(entries),expected=new Map(refs.map(info=>[info.object,info]));
+  const rowRefs=Array.isArray(row.objects)?row.objects:[];
+  if(JSON.stringify(refs)!==JSON.stringify(rowRefs.map(info=>({object:info.object,sha256:info.sha256,size:Number(info.size),storedSize:Number(info.storedSize),encoding:info.encoding})).sort((a,b)=>a.object.localeCompare(b.object))))throw Error('云端存档索引与文件清单的数据块不一致');
+  const snapshotFolder=syncSavePath(backupId),manifestFile=path.join(snapshotFolder,'manifest.json');
+  const downloadObject=async(info)=>{
+    const target=syncObjectPath(info.object);if(await require('./save-snapshots').verifyObjectFile(info,target))return false;
+    const response=await webdavRequest(settings,'GET','saves/'+info.object);
+    if(response.status===404){await response.body?.cancel();throw Error('云端缺少存档数据块：'+info.object);}
+    if(!response.ok){const status=response.status;await response.body?.cancel();throw Error('下载存档数据块失败（HTTP '+status+'）：'+info.object);}
+    const temp=target+'.restore-'+randomBytes(4).toString('hex')+'.tmp';fs.mkdirSync(path.dirname(target),{recursive:true});
+    try{
+      const stream=response.body?.getReader?Readable.fromWeb(response.body):response.body;
+      if(!stream)throw Error('云端返回了空的存档数据块');
+      await pipeline(stream,fs.createWriteStream(temp,{flags:'wx'}),...(webdavOperationSignal?[{signal:webdavOperationSignal}]:[]));
+      if(!await require('./save-snapshots').verifyObjectFile(info,temp))throw Error('云端存档数据块校验失败，未写入本地：'+info.object);
+      fs.renameSync(temp,target);return true;
+    }finally{fs.rmSync(temp,{force:true});}
+  };
+  const transfers=await mapWebdavBatch([...expected.values()],3,async info=>({downloaded:await downloadObject(info)}));
+  const downloaded=transfers.filter(row=>row.downloaded).length;
+  const localManifest={...manifest,entries:mapped};
+  fs.mkdirSync(snapshotFolder,{recursive:true});const temporary=manifestFile+'.download-'+randomBytes(4).toString('hex')+'.tmp';
+  try{fs.writeFileSync(temporary,JSON.stringify(localManifest,null,2),'utf8');fs.renameSync(temporary,manifestFile);}finally{fs.rmSync(temporary,{force:true});}
+  saveSnapshots.refreshManifestIndex([manifestFile]);
+  const result=await saveSnapshots.restore(itemId,backupId);
+  return {...result,paths,downloaded,retainedLocally:true};
+}
+function recordDeletedSaveSnapshots(entries,library=loadLibrary()){
+  const deletedAt=new Date().toISOString(),tombstones=new Map((library.deletedSaveSnapshots||[]).map(entry=>[entry.id,entry]));
+  for(const entry of entries||[]){const id=String(entry?.id||entry?.backupId||''),itemId=String(entry?.itemId||'');if(id)tombstones.set(id,{id,itemId,deletedAt});}
+  const rows=[...tombstones.values()],next={...library,...require('./library-relations').fields({...library,deletedSaveSnapshots:rows},normaliseItem)};
+  writeJson(dataFile(),next);
+  return {library:next,tombstones:rows};
+}
+async function publishDeletedSaveSnapshots(settings,entries,remoteState){
+  const {library,tombstones}=recordDeletedSaveSnapshots(entries),endpointKey=webdavSyncEndpointKey(settings);
+  const local=localSaveCatalog(endpointKey,library.items,tombstones);
+  let remote=remoteState===undefined?await readRemoteSaveCatalog(settings):remoteState;
+  if(!remote)remote={catalog:require('./webdav-save-catalog').create(),etag:'',byteLength:null};
+  const published=await publishRemoteSaveCatalog(settings,local,'upload',remote,row=>webdavDiagnosticLog.write(row));
+  const index=readSaveSyncIndex(endpointKey);index.catalog={...(index.catalog||{}),localRevision:local.revision,localCatalog:local,remoteRevision:published.catalog.revision,etag:published.etag||'',remoteLength:published.byteLength??null,lastModified:published.lastModified||''};writeSaveSyncIndex(index,endpointKey);
+  return {library,tombstones,local,published};
+}
+async function deleteRemoteBackup(settings,itemId,backupId){
+  const remote=await readRemoteSaveCatalog(settings);if(!remote)throw Error('云端没有存档索引');
+  const row=remote.catalog.entries.find(entry=>entry.id===backupId);if(!row)throw Error('云端存档不存在或已删除');
+  const manifest=await readRemoteSnapshotManifest(settings,row);if(!manifest||String(manifest.itemId||row.metadata?.itemId||'')!==String(itemId))throw Error('云端存档不属于当前游戏');
+  await publishDeletedSaveSnapshots(settings,[{id:backupId,itemId}],remote);
+  const remove=require('./webdav-save-delete').create({listFiles:listWebdavFiles,request:(...args)=>webdavRequest(...args)});
+  let cleanup;
+  try{cleanup=await remove.deleteSnapshots(settings,[backupId]);}
+  catch(error){webdavDiagnosticLog.write({event:'webdav.save-delete.cleanup-failed',operation:'delete',phase:'cleanup',snapshotId:backupId,error});return {ok:true,message:'已从云端列表删除；云端文件清理失败，后续同步会重试：'+error.message,deletedSnapshots:0,cleanupFailed:true};}
+  return {ok:true,message:cleanup.cleanupFailed?'已从云端列表删除；部分无引用数据块未清理':'已删除云端存档',deletedSnapshots:cleanup.deletedSnapshots,cleanupFailed:cleanup.cleanupFailed};
+}
 async function deleteBackups(rows=[],syncCloud=false){
   const current=saveSnapshots.listAll(loadLibrary().items),known=new Map(current.map(entry=>[entry.id,entry]));
   const selected=[...new Map(rows.map(row=>{const id=String(row?.backupId||row?.id||'');const backup=known.get(id);return [id,backup&&backup.itemId===String(row?.itemId||'')?backup:null];}).filter(([,entry])=>entry)).values()];
   if(!selected.length)return {ok:false,message:'没有找到所选存档快照'};
-  let remote=null;
-  if(syncCloud&&loadSettings().webdavUrl){const stored=loadSettings(),settings=secretSettings().resolve({},stored),remove=require('./webdav-save-delete').create({listFiles:listWebdavFiles,request:(...args)=>webdavRequest(...args)});remote=await remove.deleteSnapshots(settings,selected.map(entry=>entry.id));}
+  let remote=null,remoteCleanupError=null,cloudConfigured=false;
+  if(syncCloud&&loadSettings().webdavUrl){cloudConfigured=true;const stored=loadSettings(),settings=secretSettings().resolve({},stored),remoteState=await readRemoteSaveCatalog(settings);await publishDeletedSaveSnapshots(settings,selected,remoteState);const remove=require('./webdav-save-delete').create({listFiles:listWebdavFiles,request:(...args)=>webdavRequest(...args)});try{remote=await remove.deleteSnapshots(settings,selected.map(entry=>entry.id));}catch(error){remoteCleanupError=error;webdavDiagnosticLog.write({event:'webdav.save-delete.cleanup-failed',operation:'delete',phase:'cleanup',snapshotIds:selected.map(entry=>entry.id),error});}}
   const local=saveSnapshots.removeMany(selected.map(entry=>({itemId:entry.itemId,backupId:entry.id})),loadLibrary().items);
   if(local.removed?.length)forgetSaveSync(local.removed.map(entry=>entry.id));
-  if(syncCloud){
-    const currentLibrary=loadLibrary(),deletedAt=new Date().toISOString(),existing=new Map((currentLibrary.deletedSaveSnapshots||[]).map(entry=>[entry.id,entry]));
-    for(const entry of selected)existing.set(entry.id,{id:entry.id,itemId:entry.itemId,deletedAt});
-    const next={...currentLibrary,...require('./library-relations').fields({...currentLibrary,deletedSaveSnapshots:[...existing.values()]},normaliseItem)};
-    writeJson(dataFile(),next);
-  }
+  if(syncCloud&&!cloudConfigured)recordDeletedSaveSnapshots(selected);
   if(local.removed?.length){try{updateCachedLocalSaveCatalog({allEntries:current.filter(entry=>!local.removed.some(row=>row.id===entry.id)),removeIds:local.removed.map(entry=>entry.id),tombstones:loadLibrary().deletedSaveSnapshots||[]});}catch{invalidateLocalSaveCatalog();}}
   if(!local.ok)return {ok:false,message:'部分本地快照未删除：'+local.failed.map(entry=>entry.message).join('；'),removed:local.removed||[]};
   if(!syncCloud)return {...local,message:'已删除 '+selected.length+' 份本地存档'};
-  if(!remote)return {...local,message:'未配置 WebDAV，已仅删除本地存档'};
-  if(!remote.snapshotFound)return {...local,message:'已删除本地存档；云端没有对应快照'};
+  if(!cloudConfigured)return {...local,message:'未配置 WebDAV，已仅删除本地存档'};
+  if(remoteCleanupError)return {...local,cleanupFailed:true,message:'本地与云端列表中的存档已删除；部分云端文件未清理，后续同步会重试：'+remoteCleanupError.message};
+  if(!remote?.snapshotFound)return {...local,message:'已删除本地存档；云端目录中没有对应文件'};
   return {...local,message:remote.cleanupFailed?'已删除本地与云端快照；部分无引用数据块未能清理':'已删除本地与云端存档'};
 }
 async function deleteBackup(itemId,backupId,syncCloud=false){return deleteBackups([{itemId,backupId}],syncCloud);}
@@ -937,7 +1106,7 @@ function updateCachedLocalSaveCatalog({upsert=[],removeIds=[],allEntries=null,to
   }
   if(changed){const file=saveSyncIndexFile(),temporary=file+'.tmp-'+randomBytes(4).toString('hex');fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(temporary,JSON.stringify({schemaVersion:2,endpoints},null,2),'utf8');fs.renameSync(temporary,file);}
 }
-function saveCatalogEntries(entries){return (entries||[]).map(entry=>{for(const row of entry.entries||[]){if(!Array.isArray(row.files)&&(Number(entry.files)||0)>0)throw Error('本地存档快照包含旧格式文件；请重新备份该存档后再同步');for(const file of row.files||[])if(!file.object)throw Error('本地存档快照包含旧格式文件；请重新备份该存档后再同步');}return {id:entry.id,manifestHash:entry.manifestHash,objects:saveCatalogModule.objectRefs(entry.entries||[])};});}
+function saveCatalogEntries(entries){return (entries||[]).map(entry=>{for(const row of entry.entries||[]){if(!Array.isArray(row.files)&&(Number(entry.files)||0)>0)throw Error('本地存档快照包含旧格式文件；请重新备份该存档后再同步');for(const file of row.files||[])if(!file.object)throw Error('本地存档快照包含旧格式文件；请重新备份该存档后再同步');}const fileCount=Number(entry.files)||((entry.entries||[]).reduce((sum,row)=>sum+(row.files?.length||0),0));const storedSize=Number(entry.size)||((entry.entries||[]).reduce((sum,row)=>sum+(row.files||[]).reduce((subtotal,file)=>subtotal+(Number(file.storedSize)||0),0),0));return {id:entry.id,manifestHash:entry.manifestHash,objects:saveCatalogModule.objectRefs(entry.entries||[]),metadata:{itemId:String(entry.itemId||''),gameName:String(entry.gameName||''),createdAt:String(entry.createdAt||''),note:String(entry.note||'').slice(0,2000),files:fileCount,size:storedSize}};});}
 function readLocalSnapshotForSync(summary){
   const saveTools=require('./save-snapshots'),file=syncSavePath(String(summary.id)+'/manifest.json');
   if(!fs.existsSync(file))throw Error('本地存档索引指向了不存在的清单：'+summary.id);
@@ -963,6 +1132,35 @@ async function readRemoteSaveCatalog(settings){
   const bytes=Buffer.from(await response.arrayBuffer());let catalog;
   try{catalog=saveCatalogModule.parse(JSON.parse(bytes.toString('utf8')));}catch(error){throw Error('云端存档索引损坏；为避免漏掉云端存档，已停止同步',{cause:error});}
   return {catalog,etag:response.headers.get('etag')||'',lastModified:response.headers.get('last-modified')||'',byteLength:bytes.length};
+}
+async function readRemoteSnapshotManifest(settings,entry){
+  const id=require('./webdav-save-catalog').normalizeEntry(entry).id,relative='saves/'+id+'/manifest.json';
+  const response=await webdavRequest(settings,'GET',relative,null,'',{'Cache-Control':'no-cache'});
+  if(response.status===404){await response.body?.cancel();return null;}
+  if(!response.ok){const status=response.status;await response.body?.cancel();throw Error('无法读取云端存档清单（HTTP '+status+'）：'+id);}
+  const bytes=Buffer.from(await response.arrayBuffer());if(bytes.length>8*1024*1024)throw Error('云端存档清单超过安全读取大小：'+id);
+  let manifest;try{manifest=JSON.parse(bytes.toString('utf8'));}catch{throw Error('云端存档清单格式无效：'+id);}
+  const saveTools=require('./save-snapshots');if(!Array.isArray(manifest?.entries)||saveTools.manifestHash(manifest)!==String(entry.manifestRevision||entry.manifestHash||''))throw Error('云端存档清单与索引不一致：'+id);
+  return manifest;
+}
+function summaryFromRemoteManifest(id,manifest,manifestRevision,localAvailable=false){
+  const rows=manifest.entries||[];return {id,itemId:String(manifest.itemId||''),gameName:String(manifest.gameName||''),createdAt:String(manifest.createdAt||''),note:String(manifest.note||''),files:rows.reduce((sum,row)=>sum+(row.files?.length||0),0),size:rows.reduce((sum,row)=>sum+(row.files||[]).reduce((n,file)=>n+(Number(file.storedSize)||0),0),0),manifestHash:manifestRevision,localAvailable,remoteOnly:!localAvailable,syncStatus:localAvailable?'已同步':'云端（未下载）'};
+}
+async function listRemoteSaveSnapshots(itemId,settings){
+  const remote=await readRemoteSaveCatalog(settings);if(!remote)return [];
+  const localIds=new Set(saveSnapshots.list(itemId).map(row=>row.id));
+  const candidates=remote.catalog.entries.filter(row=>!remote.catalog.tombstones.includes(row.id));
+  const rows=await mapWebdavBatch(candidates,4,async entry=>{
+    let metadata=entry.metadata||null;
+    if(metadata?.itemId!==String(itemId)){
+      const manifest=await readRemoteSnapshotManifest(settings,entry);if(!manifest)return null;
+      metadata={itemId:String(manifest.itemId||''),gameName:String(manifest.gameName||''),createdAt:String(manifest.createdAt||''),note:String(manifest.note||''),files:(manifest.entries||[]).reduce((sum,row)=>sum+(row.files?.length||0),0),size:(manifest.entries||[]).reduce((sum,row)=>sum+(row.files||[]).reduce((n,file)=>n+(Number(file.storedSize)||0),0),0)};
+    }
+    if(String(metadata?.itemId||'')!==String(itemId))return null;
+    const localAvailable=localIds.has(entry.id);
+    return {id:entry.id,itemId:String(itemId),gameName:String(metadata.gameName||''),createdAt:String(metadata.createdAt||''),note:String(metadata.note||''),files:Number(metadata.files)||0,size:Number(metadata.size)||0,manifestHash:entry.manifestRevision,objects:entry.objects||[],localAvailable,remoteOnly:!localAvailable,syncStatus:localAvailable?'已同步':'云端（未下载）'};
+  });
+  return rows.filter(Boolean).sort((a,b)=>Date.parse(b.createdAt||0)-Date.parse(a.createdAt||0));
 }
 async function refreshRemoteSaveCatalogForWrite(settings,diagnostic=()=>{}){
   return require('./webdav-save-catalog-write').refreshCurrent({
@@ -992,14 +1190,19 @@ async function registerUploadedSnapshot(settings,entry,remoteState=null){
 }
 async function syncOneSnapshot(settings,entry,context='item-retry'){
   const endpointKey=webdavSyncEndpointKey(settings);
-  await ensureWebdavPath(settings);
-  const remote=await readRemoteSaveCatalog(settings);
-  const result=await uploadSnapshotToWebdav(settings,entry,{direction:'upload',context});
-  await require('./save-backup-sync').confirmSnapshotUploads([{entry,result}],{
-    publishCatalog:()=>registerUploadedSnapshot(settings,entry,remote),
-    markSynced:(snapshot,verification)=>markSaveSynced(snapshot.id,snapshot.manifestHash,verification,endpointKey)
-  });
-  return result;
+  try{
+    await ensureWebdavPath(settings);
+    const remote=await readRemoteSaveCatalog(settings);
+    const result=await uploadSnapshotToWebdav(settings,entry,{direction:'upload',context});
+    await require('./save-backup-sync').confirmSnapshotUploads([{entry,result}],{
+      publishCatalog:()=>registerUploadedSnapshot(settings,entry,remote),
+      markSynced:(snapshot,verification)=>markSaveSynced(snapshot.id,snapshot.manifestHash,verification,endpointKey)
+    });
+    return result;
+  }catch(error){
+    clearSaveSynced(entry.id,endpointKey);
+    throw error;
+  }
 }
 async function syncWebdav(settings,direction,resolution,expectedVersion){
   webdavSyncLibraryCommitted=false;
@@ -1130,8 +1333,7 @@ async function syncWebdav(settings,direction,resolution,expectedVersion){
     webdavSyncPhase='download-save-snapshots';
     try{
       if(!skipSaveSync){
-      const saveTools=require('./save-snapshots'),deletedRows=prepared.state.deletedSaveSnapshots||[],deletedIds=new Set(deletedRows.map(row=>row.id||row.snapshotId));
-      const remoteCatalog=remoteSaveCatalog?.catalog||saveCatalogModule.create(),liveEntries=remoteCatalog.entries.filter(row=>!deletedIds.has(row.id));
+      const deletedRows=prepared.state.deletedSaveSnapshots||[],deletedIds=new Set(deletedRows.map(row=>row.id||row.snapshotId));
       const tombstonedLocals=initialSaveCatalog.entries.filter(entry=>deletedIds.has(entry.id)).map(summary=>{
         const manifest=syncSavePath(summary.id+'/manifest.json');
         if(fs.existsSync(manifest))return readLocalSnapshotForSync(summary);
@@ -1139,48 +1341,9 @@ async function syncWebdav(settings,direction,resolution,expectedVersion){
         return deleted?.itemId?{id:summary.id,itemId:deleted.itemId}:null;
       }).filter(Boolean);
       if(tombstonedLocals.length){const removed=saveSnapshots.removeMany(tombstonedLocals.map(entry=>({itemId:entry.itemId,backupId:entry.id})),loadLibrary().items,tombstonedLocals);if(removed.removed?.length){forgetSaveSync(removed.removed.map(row=>row.id));updateCachedLocalSaveCatalog({removeIds:removed.removed.map(row=>row.id),tombstones:deletedRows});}}
-      const manifestData=new Map(),expectedObjects=new Map(),objectVerifications={};
-      const localCatalogRows=new Map(initialSaveCatalog.entries.map(entry=>[entry.id,entry]));
-      const remoteManifests=await mapWebdavBatch(liveEntries,4,async entry=>{
-        const relative='saves/'+entry.id+'/manifest.json',target=syncSavePath(entry.id+'/manifest.json'),localSummary=localCatalogRows.get(entry.id),hasLocalManifest=fs.existsSync(target);
-        const catalogMatches=Boolean(localSummary&&localSummary.manifestRevision===entry.manifestRevision&&JSON.stringify(localSummary.objects)===JSON.stringify(entry.objects||[]));
-        if(catalogMatches&&hasLocalManifest)return {entry,relative,target,localManifest:null,unchanged:true};
-        let localManifest=null;
-        if(hasLocalManifest&&(!localSummary||actualDirection==='download')){try{localManifest=JSON.parse(fs.readFileSync(target,'utf8'));}catch{localManifest=null;}}
-        if(localManifest&&saveTools.manifestHash(localManifest)===entry.manifestRevision)return {entry,relative,target,localManifest,unchanged:true};
-        if(hasLocalManifest&&actualDirection==='bidirectional')throw Error('同一存档快照在本地与云端均有变化：'+entry.id+'；请选择上传或下载方向');
-        const response=await download(relative);if(!response)throw Error('云端存档索引指向了不存在的清单：'+entry.id);
-        const etag=response.headers.get('etag'),bytes=Buffer.from(await response.arrayBuffer());let remoteManifest;
-        try{remoteManifest=JSON.parse(bytes.toString('utf8'));if(!remoteManifest||!Array.isArray(remoteManifest.entries))throw Error('invalid');}
-        catch{throw Error('云端存档清单格式无效：'+relative);}
-        const remoteHash=saveTools.manifestHash(remoteManifest);if(remoteHash!==entry.manifestRevision)throw Error('云端存档清单与目录索引修订号不一致：'+entry.id);
-        return {entry,relative,target,localManifest,remoteManifest:saveTools.restoreManifestForDevice(remoteManifest,syncDeviceId(),localManifest),remoteHash,manifestValidator:{etag:etag&&!etag.startsWith('W/')?etag:''}};
-      });
-      for(const row of remoteManifests){if(row.unchanged){skippedFiles++;continue;}manifestData.set(row.entry.id,row);}
-      for(const row of manifestData.values())for(const info of row.entry.objects||[]){syncObjectPath(info.object);const old=expectedObjects.get(info.object);if(old&&JSON.stringify(old)!==JSON.stringify(info))throw Error('云端存档索引对同一数据块记录了不同校验信息');expectedObjects.set(info.object,info);}
-      for(const entry of liveEntries.filter(row=>!manifestData.has(row.id)))for(const info of entry.objects||[]){
-        if(!expectedObjects.has(info.object)&&!fs.existsSync(syncObjectPath(info.object)))expectedObjects.set(info.object,info);
-      }
-      const objectResults=await mapWebdavBatch([...expectedObjects.entries()],4,async([object,info])=>{
-        const target=syncObjectPath(object);let localValid=false;
-        if(fs.existsSync(target)){localValid=syncContext.isLocalObjectVerified(object,info);if(!localValid){localValid=await saveTools.verifyObjectBytes(info,fs.readFileSync(target));if(localValid)syncContext.rememberLocalObject(object,info);}}
-        if(localValid){const proof={sha256:String(info.sha256||''),etag:''};objectVerifications[object]=proof;syncContext.rememberRemoteObject(object,proof);return {skipped:true};}
-        const response=await download('saves/'+object);if(!response)throw Error('云端存档数据块缺失：'+object);
-        const etag=response.headers.get('etag'),bytes=Buffer.from(await response.arrayBuffer());if(!await saveTools.verifyObjectBytes(info,bytes))throw Error('云端存档数据块校验失败，未写入本地：'+object);
-        fs.mkdirSync(path.dirname(target),{recursive:true});const temp=target+'.download-'+randomBytes(4).toString('hex')+'.tmp';fs.writeFileSync(temp,bytes);fs.renameSync(temp,target);syncContext.rememberLocalObject(object,info);
-        const proof={sha256:String(info.sha256||''),etag:etag&&!etag.startsWith('W/')?etag:''};objectVerifications[object]=proof;syncContext.rememberRemoteObject(object,proof,true);return {downloaded:1};
-      });
-      skippedFiles+=objectResults.filter(result=>result.skipped).length;downloaded+=objectResults.reduce((sum,result)=>sum+(result.downloaded||0),0);
-      const downloadedEntries=[],downloadSyncConfirmations=[];
-      for(const [snapshotId,row] of manifestData){
-        fs.mkdirSync(path.dirname(row.target),{recursive:true});const temp=row.target+'.download-'+randomBytes(4).toString('hex')+'.tmp';fs.writeFileSync(temp,JSON.stringify(row.remoteManifest,null,2));fs.renameSync(temp,row.target);saveSnapshots.refreshManifestIndex([row.target]);downloaded++;
-        const stored=row.remoteManifest,objects={};
-        for(const item of stored.entries||[])for(const file of item.files||[]){const proof=objectVerifications[file.object];if(!proof||proof.sha256!==String(file.sha256||''))throw Error('本地存档数据块校验失败，未标记已同步：'+file.object);if(file.object)objects[file.object]=proof;}
-        downloadSyncConfirmations.push({id:snapshotId,manifestHash:row.remoteHash,verification:{manifestValidator:row.manifestValidator,objects}});
-        downloadedEntries.push({id:snapshotId,itemId:stored.itemId,folder:path.dirname(row.target),entries:stored.entries||[],files:(stored.entries||[]).reduce((count,item)=>count+(item.files?.length||0),0),manifestHash:row.remoteHash});
-      }
-      if(tombstonedLocals.length||downloadedEntries.length)updateCachedLocalSaveCatalog({upsert:downloadedEntries,removeIds:tombstonedLocals.map(row=>row.id),tombstones:deletedRows});
-      for(const row of downloadSyncConfirmations)saveSnapshotConfirmations.push({entry:{id:row.id,manifestHash:row.manifestHash},verification:row.verification});
+        const remoteCount=(remoteSaveCatalog?.catalog?.entries||[]).filter(entry=>!deletedIds.has(entry.id)).length;
+        skippedFiles+=remoteCount;
+        webdavDiagnosticLog.write({event:'webdav.save-snapshots.deferred',operation:'sync',phase:'download-saves',remoteSnapshotCount:remoteCount,downloadedObjects:0,detail:'Remote save snapshots remain cloud-only until the user switches to one'});
       }
       else webdavDiagnosticLog.write({event:'webdav.save-catalog.fast-path',operation:'sync',phase:'download-saves',localRevision:initialSaveCatalog.revision,remoteEtag:remoteSaveCatalogMetadata?.etag||''});
     }catch(error){webdavDiagnosticLog.write({event:'webdav.save-download.failed',operation:'sync',phase:'download-saves',error});throw Error('资源库已同步；存档下载未完成：'+error.message+'。已有文件保留，可重试。',{cause:error});}
@@ -1189,11 +1352,7 @@ async function syncWebdav(settings,direction,resolution,expectedVersion){
     webdavSyncPhase='save-catalog-finalize';
     try{
       const tombstones=prepared.state.deletedSaveSnapshots||[];
-      const finalLocalCatalog=actualDirection==='download'
-        ?saveCatalogModule.create([...(plannedSaveCatalog.entries||[]),...(remoteSaveCatalog?.catalog?.entries||[])],tombstones)
-        :actualDirection==='bidirectional'
-          ?saveCatalogModule.merge(remoteSaveCatalog?.catalog||null,plannedSaveCatalog,'bidirectional')
-          :plannedSaveCatalog;
+      const finalLocalCatalog=plannedSaveCatalog;
       await require('./save-backup-sync').publishSnapshotCatalog(saveSnapshotConfirmations,async()=>{
           if(actualDirection==='upload'||actualDirection==='bidirectional'){
             if(!remoteSaveCatalog&&remoteSaveCatalogMetadata?.exists)remoteSaveCatalog=await readRemoteSaveCatalog(settings);
@@ -1240,28 +1399,30 @@ async function syncWebdav(settings,direction,resolution,expectedVersion){
 
 function currentDisguiseState() {
   const stored = loadSettings();
-  return { enabled: Boolean(stored.disguiseEnabled), profile: stored.disguiseProfile || 'course', ...(DISGUISE_PROFILES[stored.disguiseProfile] || DISGUISE_PROFILES.course) };
+  return { enabled: Boolean(stored.disguiseEnabled) };
 }
 
 let readerWindows=null,audioService=null,audioDisplay=null,unifiedPlayer=null,usageService=null,playerQuitting=false,webdavNetworkOperation='',webdavSyncPhase='idle',webdavSyncLibraryCommitted=false;
 async function finishMediaSessions(){try{await unifiedPlayer?.close();}finally{readerWindows?.closeAll();await usageService?.stop();}}
 app.on('before-quit',event=>{if(unifiedPlayer&&!playerQuitting){event.preventDefault();playerQuitting=true;finishMediaSessions().catch(error=>console.error('退出时保存失败：',error)).finally(()=>app.quit());}});
-function setDisguiseState(enabled, profile = 'course') {
+function setDisguiseState(enabled) {
   if(enabled){readerWindows?.closeAll();audioDisplay?.hide();}
-  const nextProfile = DISGUISE_PROFILES[profile] ? profile : 'course';
   const stored = loadSettings();
-  const next = { ...stored, disguiseEnabled: Boolean(enabled), disguiseProfile: nextProfile, updatedAt:new Date().toISOString() };
+  const next = { ...stored, disguiseEnabled: Boolean(enabled), updatedAt:new Date().toISOString() };
   writeJson(settingsFile(), next);
-  const state = { enabled: next.disguiseEnabled, profile: nextProfile, ...DISGUISE_PROFILES[nextProfile] };
+  const state = { enabled: next.disguiseEnabled };
   if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.setTitle(state.enabled ? state.title : '悦森盒 YueDen');
+    mainWindow.setTitle(state.enabled ? '在线视频课程 - 学习中心' : '悦森盒 YueDen');
     mainWindow.webContents.send('disguise:state', state);
   }
   return state;
 }
 
-const quickDisguise=require('./quick-disguise').create({windows:()=>BrowserWindow.getAllWindows(),setState:()=>setDisguiseState(true,loadSettings().disguiseProfile),closePlayer:()=>unifiedPlayer?.conceal(),openExternal:url=>shell.openExternal(url),videoUrl:()=>loadSettings().disguiseVideoUrl,report:error=>console.error('快速伪装未完成：'+error.message)});
-app.on('browser-window-created',(_,win)=>{win.webContents.on('before-input-event',(event,input)=>{let file;try{file=require('node:url').fileURLToPath(win.webContents.getURL());}catch{return;}if(!['index.html','reader.html','audio-window.html',path.join('player','window.html')].some(p=>path.resolve(file)===path.join(__dirname,p)))return;if(quickDisguise.input(input))event.preventDefault();});});
+const quickDisguise=require('./quick-disguise').create({windows:()=>BrowserWindow.getAllWindows(),setState:()=>setDisguiseState(true),closePlayer:()=>unifiedPlayer?.conceal(),openExternal:url=>shell.openExternal(url),videoUrl:()=>loadSettings().disguiseVideoUrl,report:error=>console.error('快速伪装未完成：'+error.message)});
+const appIconPath=path.join(__dirname,'assets','icon.ico');
+let appWindowIcon=nativeImage.createFromPath(appIconPath);
+if(appWindowIcon.isEmpty())appWindowIcon=nativeImage.createFromPath(path.join(__dirname,'assets','icon.png'));
+app.on('browser-window-created',(_,win)=>{if(!appWindowIcon.isEmpty())win.setIcon(appWindowIcon);win.webContents.on('before-input-event',(event,input)=>{let file;try{file=require('node:url').fileURLToPath(win.webContents.getURL());}catch{return;}if(!['index.html','reader.html','audio-window.html',path.join('player','window.html')].some(p=>path.resolve(file)===path.join(__dirname,p)))return;if(quickDisguise.input(input))event.preventDefault();});});
 function createWindow() {
   const Bounds=require('./window-bounds'),windowFile=path.join(app.getPath('userData'),'window-state.json');
   let savedBounds;try{savedBounds=JSON.parse(fs.readFileSync(windowFile,'utf8'));}catch{}
@@ -1338,7 +1499,10 @@ function registerIpc() {
     readerWindows?.appearance();unifiedPlayer?.appearance();
     return secretSettings().publicSettings(loadSettings(),true);
   });
-  ipcMain.handle('metadata:libraryCover',(event,urls)=>candidateCoverCache.resolve(urls,{owner:'library:'+event.sender.id,id:'library-covers'}));
+  ipcMain.handle('metadata:libraryCover',async(event,urls)=>{
+    const candidates=Array.isArray(urls)?urls.filter(value=>typeof value==='string'):[];
+    return candidateCoverCache.resolve(candidates,{owner:'library:'+event.sender.id,id:'library-covers'});
+  });
   ipcMain.handle('metadata:prepareCandidate',(_,candidate)=>prepareMetadataCandidate(candidate));
   ipcMain.handle('metadata:integrate',(_,type,primarySource,sources,query='')=>{
     if(!['game','movie','anime','manga','book'].includes(type)||!Array.isArray(sources))throw Error('无效的整合来源');
@@ -1419,12 +1583,38 @@ function registerIpc() {
     if(result.ok===false)throw Error(result.message);
     return result.canceled ? [] : result.filePaths;
   });
+  ipcMain.handle('saves:detectPaths',(_,item)=>discoverSavePaths(item));
+  ipcMain.handle('saves:persistPaths',(_,itemId,paths)=>persistSavePaths(String(itemId||''),Array.isArray(paths)?paths:[]));
   ipcMain.handle('saves:backup', (_, itemId, paths, options) => backupSaves(itemId, paths, options));
   ipcMain.handle('saves:list', (_, itemId) => listBackups(itemId));
   ipcMain.handle('saves:listAll', () => listAllBackups());
+  ipcMain.handle('saves:listRemote',async(_,itemId,settings)=>{
+    if(webdavNetworkOperation)return {ok:false,message:'另一个 WebDAV 操作正在进行，请等待完成后再试'};
+    webdavNetworkOperation='save-list';webdavOperationSignal=AbortSignal.timeout(60000);
+    try{
+      const resolvedSettings=secretSettings().resolve(settings||{},loadSettings()),resolvedItemId=String(itemId||''),entries=await listRemoteSaveSnapshots(resolvedItemId,resolvedSettings);
+      return {ok:true,entries};
+    }
+    catch(error){return {ok:false,message:webdavProtocol.describe(error)};}
+    finally{webdavOperationSignal=null;webdavNetworkOperation='';}
+  });
   ipcMain.handle('saves:updateNote', (_, itemId, backupId, note) => {const result=saveSnapshots.updateNote(itemId, backupId, note);if(result?.ok){const entry=saveSnapshots.list(itemId).find(row=>row.id===backupId);if(entry)updateCachedLocalSaveCatalog({upsert:[entry]});else invalidateLocalSaveCatalog();}return result;});
   ipcMain.handle('saves:restore', (_, itemId, backupId) => restoreBackup(itemId, backupId));
+  ipcMain.handle('saves:restoreRemote',async(_,itemId,backupId,settings)=>{
+    if(webdavNetworkOperation)return {ok:false,message:'另一个 WebDAV 操作正在进行，请等待完成后再试'};
+    webdavNetworkOperation='save-restore';webdavOperationSignal=AbortSignal.timeout(5*60*1000);
+    try{return await restoreRemoteBackup(secretSettings().resolve(settings||{},loadSettings()),String(itemId||''),String(backupId||''));}
+    catch(error){return {ok:false,message:webdavProtocol.describe(error)};}
+    finally{webdavOperationSignal=null;webdavNetworkOperation='';}
+  });
   ipcMain.handle('saves:delete', (_, itemId, backupId, options) => deleteBackup(itemId, backupId, options?.syncCloud === true));
+  ipcMain.handle('saves:deleteRemote',async(_,itemId,backupId,settings)=>{
+    if(webdavNetworkOperation)return {ok:false,message:'另一个 WebDAV 操作正在进行，请等待完成后再试'};
+    webdavNetworkOperation='save-delete-remote';webdavOperationSignal=AbortSignal.timeout(120000);
+    try{return await deleteRemoteBackup(secretSettings().resolve(settings||{},loadSettings()),String(itemId||''),String(backupId||''));}
+    catch(error){return {ok:false,message:webdavProtocol.describe(error)};}
+    finally{webdavOperationSignal=null;webdavNetworkOperation='';}
+  });
   ipcMain.handle('saves:deleteMany', (_, rows, options) => deleteBackups(rows, options?.syncCloud === true));
   ipcMain.handle('saves:syncOne', async (_, itemId, backupId, settings, context) => {
     if(webdavNetworkOperation)return {ok:false,message:'另一个 WebDAV 操作正在进行，请等待完成后再试'};
@@ -1460,7 +1650,7 @@ function registerIpc() {
     } catch (error) { webdavDiagnosticLog.write({event:'webdav.sync.failed',operation:'sync',phase:webdavSyncPhase||'sync',durationMs:Date.now()-started,partial:webdavSyncLibraryCommitted,error});return { ok: false, partial:webdavSyncLibraryCommitted, phase:webdavSyncPhase||'sync', message: require('./webdav-client').describe(error) }; }
     finally {if(webdavNetworkOperation==='sync')webdavNetworkOperation='';webdavOperationSignal=null;webdavSyncPhase='idle';}
   });
-  ipcMain.handle('disguise:set', (_, enabled, profile) => setDisguiseState(enabled, profile));
+  ipcMain.handle('disguise:set', (_, enabled) => setDisguiseState(enabled));
   const pendingBackupImports=new Map();
   ipcMain.handle('data:export', async (_, state) => {
     const result = await dialog.showSaveDialog({ title: '导出 悦森盒 YueDen 数据', defaultPath: 'YueDen-backup.json', filters: [{ name: 'JSON 数据', extensions: ['json'] }] });
@@ -1530,7 +1720,7 @@ if (!app.requestSingleInstanceLock()) {
     createWindow();
     globalShortcut.register('CommandOrControl+Shift+U', () => {
       const current = currentDisguiseState();
-      setDisguiseState(!current.enabled, current.profile);
+      setDisguiseState(!current.enabled);
     });
     app.on('activate', () => { if (!BrowserWindow.getAllWindows().length) createWindow(); });
   });

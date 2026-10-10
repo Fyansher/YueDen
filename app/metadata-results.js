@@ -82,7 +82,7 @@ function showCandidates(payload,{preserve=false}={}) { document.getElementById('
   tabs.replaceChildren();
   for (const group of metadataResultGroups) {
     const button=document.createElement('button'); button.type='button';button.dataset.sourceId=group.id;button.id='source-tab-'+group.id;button.setAttribute('role','tab');button.setAttribute('aria-controls','candidateList');
-    const suffix=group.state==='loading'?'获取中 '+group.items.length:group.state==='unconfigured'?'需密钥':group.state==='unavailable'?(group.statusLabel||'请求失败'):({'disabled':'未启用','skipped':'未执行','empty':'0 条结果','timeout':'超时','http-error':'HTTP 错误','parse-error':'解析错误','rate-limited':'被限流','upstream-failure':'上游故障'}[group.state]||String(group.items.length));
+    const suffix=group.state==='loading'?'获取中 '+group.items.length:group.state==='supplementing'?'补充中 '+group.items.length:group.state==='unconfigured'?'需密钥':group.state==='unavailable'?(group.statusLabel||'请求失败'):({'disabled':'未启用','skipped':'未执行','empty':'0 条结果','timeout':'超时','http-error':'HTTP 错误','parse-error':'解析错误','rate-limited':'被限流','upstream-failure':'上游故障'}[group.state]||String(group.items.length));
     button.textContent=group.label+' · '+suffix;
     button.onclick=()=>{activeMetadataSource=group.id;renderMetadataSource();};tabs.appendChild(button);
   }
@@ -94,8 +94,8 @@ function renderMetadataSource() {
   const group=metadataResultGroups.find(group=>group.id===activeMetadataSource);if(!group)return;
   renderPrimarySourceControl();
   all('#candidateSourceTabs button').forEach(button=>{const selected=button.dataset.sourceId===group.id;button.setAttribute('aria-selected',String(selected));button.tabIndex=selected?0:-1;});
-  const hint=document.querySelector('.candidate-hint');hint.textContent=group.label+' · '+group.items.length+' 个候选'+(group.state==='loading'?'，结果会陆续补充，可随时选择或关闭。':'')+(group.message?'。'+group.message:'。选择具体条目后填入编辑器。');
-  const host=$('candidateList');host.scrollTop=0;host.setAttribute('aria-busy',String(group.state==='loading'));host.setAttribute('role','tabpanel');host.setAttribute('aria-labelledby','source-tab-'+group.id);
+  const hint=document.querySelector('.candidate-hint');hint.textContent=group.label+' · '+group.items.length+' 个候选'+(group.state==='loading'?'，结果会陆续补充，可随时选择或关闭。':group.state==='supplementing'?'，已有候选可选，其他地区结果会继续追加。':'')+(group.message?'。'+group.message:'。选择具体条目后填入编辑器。');
+  const host=$('candidateList');host.scrollTop=0;host.setAttribute('aria-busy',String(['loading','supplementing'].includes(group.state)));host.setAttribute('role','tabpanel');host.setAttribute('aria-labelledby','source-tab-'+group.id);
   const previousImages=new Map([...host.querySelectorAll('.candidate-cover[data-cover-key]')].map(image=>[image.dataset.coverKey,image]));
   candidateCoverObserver?.disconnect();
   candidateCoverObserver=typeof IntersectionObserver==='function'?new IntersectionObserver(entries=>{for(const entry of entries)if(entry.isIntersecting){candidateCoverObserver.unobserve(entry.target);entry.target._loadCover?.();}},{root:host,rootMargin:'180px'}):null;

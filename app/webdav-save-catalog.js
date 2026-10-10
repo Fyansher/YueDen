@@ -26,7 +26,16 @@ function normalizeEntry(row) {
   for (const ref of objects) {
     if (!/^objects\/[a-f0-9]{2}\/[a-f0-9]{64}\.(?:gz|bin)$/i.test(ref.object) || !/^[a-f0-9]{64}$/i.test(ref.sha256) || ref.object !== `objects/${ref.sha256.slice(0, 2)}/${ref.sha256}.${ref.encoding === 'gzip' ? 'gz' : 'bin'}` || !Number.isFinite(ref.size) || !Number.isFinite(ref.storedSize) || !['gzip', 'raw'].includes(ref.encoding)) throw Error('存档索引包含无效对象引用');
   }
-  return { id, manifestRevision: String(manifestRevision), objects };
+  const source = row?.metadata && typeof row.metadata === 'object' && !Array.isArray(row.metadata) ? row.metadata : null;
+  const metadata = source ? {
+    ...(typeof source.itemId === 'string' ? { itemId: source.itemId } : {}),
+    ...(typeof source.gameName === 'string' ? { gameName: source.gameName } : {}),
+    ...(typeof source.createdAt === 'string' ? { createdAt: source.createdAt } : {}),
+    ...(typeof source.note === 'string' ? { note: source.note.slice(0, 2000) } : {}),
+    ...(Number.isSafeInteger(Number(source.files)) && Number(source.files) >= 0 ? { files: Number(source.files) } : {}),
+    ...(Number.isSafeInteger(Number(source.size)) && Number(source.size) >= 0 ? { size: Number(source.size) } : {})
+  } : null;
+  return { id, manifestRevision: String(manifestRevision), objects, ...(metadata && Object.keys(metadata).length ? { metadata } : {}) };
 }
 
 function revision(entries, tombstones) {
@@ -64,7 +73,7 @@ function merge(remote, local, direction = 'bidirectional') {
 }
 
 function canSkip({ localRevision, cached, remote }) {
-  return Boolean(localRevision && cached?.localRevision === localRevision && cached.remoteRevision === localRevision && cached.etag && !/^W\//i.test(cached.etag) && remote?.exists && remote.etag === cached.etag && Number.isFinite(remote.contentLength) && remote.contentLength === cached.remoteLength);
+  return Boolean(localRevision && cached?.localRevision === localRevision && cached.etag && !/^W\//i.test(cached.etag) && remote?.exists && remote.etag === cached.etag && Number.isFinite(remote.contentLength) && remote.contentLength === cached.remoteLength);
 }
 
 function canSkipByContent(localRevision, remoteCatalog) {

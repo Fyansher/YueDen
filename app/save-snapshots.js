@@ -61,6 +61,19 @@ async function verifyObjectBytes(file, bytes) {
     return size === expectedSize && hash.digest('hex') === String(file.sha256).toLowerCase();
   } catch { return false; }
 }
+async function verifyObjectFile(file, filename) {
+  try {
+    const expectedSize = Number(file?.size), storedSize = Number(file?.storedSize);
+    if (!Number.isSafeInteger(expectedSize) || expectedSize < 0 || !Number.isSafeInteger(storedSize) || storedSize < 0 || !/^[a-f0-9]{64}$/i.test(String(file?.sha256 || ''))) return false;
+    if (file?.encoding && !['gzip', 'raw'].includes(file.encoding)) return false;
+    const stat=fs.statSync(filename);if(stat.size!==storedSize)return false;
+    const hash=crypto.createHash('sha256');let size=0;
+    const tap=new Transform({transform(chunk,_encoding,callback){size+=chunk.length;if(size>expectedSize)return callback(Error('存档数据块超过清单标记大小'));hash.update(chunk);callback(null,chunk);}});
+    const sink=new Writable({write(_chunk,_encoding,callback){callback();}});
+    await pipeline(fs.createReadStream(filename),file.encoding==='gzip'?zlib.createGunzip():new Transform({transform(chunk,_encoding,callback){callback(null,chunk);}}),tap,sink);
+    return size===expectedSize&&hash.digest('hex')===String(file.sha256).toLowerCase();
+  }catch{return false;}
+}
 function readableName(value, fallback = '游戏') {
   const name = String(value || '').normalize('NFC').replace(/[<>:"/\\|?*\u0000-\u001f]/g, '-').replace(/\s+/g, '-').replace(/[. ]+$/g, '').slice(0, 48);
   return name || fallback;
@@ -389,4 +402,4 @@ function create(root) {
   return { backup, list, listAll, refreshManifestIndex, updateNote, restore, remove, removeMany, openFolder, collectGarbage, itemFolderName };
 }
 
-module.exports = { create, readableName, itemFolderName, collectGarbage, findManifests, digest, manifestHash, manifestContent, toRemoteManifest, restoreManifestForDevice, verifyObjectBytes };
+module.exports = { create, readableName, itemFolderName, collectGarbage, findManifests, digest, manifestHash, manifestContent, toRemoteManifest, restoreManifestForDevice, verifyObjectBytes, verifyObjectFile };

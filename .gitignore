@@ -18,3 +18,7 @@ app/player/dist/
 *.7z
 *.db
 *.sqlite
+!app/codec/bin/
+!app/codec/bin/ffmpeg.exe
+!app/codec/bin/ffprobe.exe
+!app/codec/bin/*.dll

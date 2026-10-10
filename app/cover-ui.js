@@ -18,17 +18,12 @@ function setLibraryLayout(value) {
   queueSettingsSave({ appearance: { libraryLayouts: { ...settings.appearance?.libraryLayouts, [activeView]: value } } }); renderLibrary();
 }
 function coverFor(item, orientation = 'landscape') {
-  if(item.coverShared===true&&item.cover)return item.cover;
   const preferred=orientation==='portrait'?'coverPortrait':'coverLandscape',opposite=orientation==='portrait'?'coverLandscape':'coverPortrait';
-  if(item[preferred])return item[preferred];
   const actual=typeof CoverClassifier!=='undefined'?CoverClassifier.orientation(item):'';
-  if(item.cover&&(!actual||actual==='square'||actual===orientation))return item.cover;
-  if(actual&&item[opposite])return item[opposite];
-  if(item.cover)return item.cover;
-  if(actual)return '';
-  // Older library entries often only have one directional field. Keep their
-  // historic fallback until the user explicitly records an image direction.
-  return item[opposite]||item.cover||'';
+  const commonAllowed=item.coverShared===true||!actual||actual==='square'||actual===orientation;
+  // Keep saved images first, but let a retained source URL show when its local
+  // cover is missing; then use the same item's other direction before a placeholder.
+  return [item[preferred],item.networkCovers?.[preferred],commonAllowed?item.cover:'',commonAllowed?item.networkCovers?.cover:'',item[opposite],item.networkCovers?.[opposite],item.cover,item.networkCovers?.cover].find(Boolean)||'';
 }
 function fillCoverFields(item) {
   editorCoverDirection = coverDirectionForLayout(item);

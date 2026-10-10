@@ -5,6 +5,8 @@ const version=testVersion||require('../package.json').version;
 const player=__dirname,app=path.dirname(player),redesign=path.dirname(app),work=path.dirname(redesign),name='YueDen '+version,out=path.join(redesign,'release',name),runtime=path.join(work,'runtime-44/extracted');
 const zip=path.join(redesign,'release','YueDen-'+version+'-Windows-x64.zip');if(process.argv.includes('--zip')&&fs.existsSync(zip))throw Error('ZIP already exists; preserve it');
 const finishOnly=process.argv.includes('--finish-only');if(fs.existsSync(out)&&!finishOnly)throw Error('Output already exists; preserve it, use a new version for another build');
+// Audio import and playback use these bundled CLI tools. Fail packaging early if a clean build would omit them or their adjacent DLLs.
+for(const tool of ['ffmpeg.exe','ffprobe.exe']){const file=path.join(app,'codec/bin',tool);if(!fs.existsSync(file))throw Error('Required bundled audio runtime is missing: '+file);try{const versionText=cp.execFileSync(file,['-version'],{encoding:'utf8',windowsHide:true,timeout:15000});if(!versionText.includes(' version '))throw Error('unexpected version output');}catch(error){throw Error('Bundled audio runtime is not runnable: '+file+' ('+error.message+')');}}
 const hash=f=>crypto.createHash('sha256').update(fs.readFileSync(f)).digest('hex');
 const copy=(a,b)=>{fs.mkdirSync(path.dirname(b),{recursive:true});fs.cpSync(a,b,{recursive:true})};
 if(!finishOnly){for(const n of fs.readdirSync(runtime)){if(n==='resources')continue;copy(path.join(runtime,n),path.join(out,'程序',n==='electron.exe'?'YueDen.exe':n==='LICENSE'?'LICENSE.electron.txt':n))}

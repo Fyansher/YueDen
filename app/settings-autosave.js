@@ -1,5 +1,5 @@
 /* Save individual setting edits, preserving unrelated settings and write order. */
-let settingsRevision = 0, settingsSavedRevision = 0, settingsWrite = null;
+let settingsRevision = 0, settingsSavedRevision = 0, settingsToastRevision = 0, settingsWrite = null;
 let settingsToastDelay = null, settingsToastTimer = null, settingsToastExitTimer = null;
 function hideSettingsToast() {
   clearTimeout(settingsToastDelay); clearTimeout(settingsToastTimer); clearTimeout(settingsToastExitTimer);
@@ -27,6 +27,7 @@ function settingsSaveHint(message, failed = false) {
 function flushSettingsSave() {
   if (settingsWrite) return settingsWrite;
   if (settingsSavedRevision === settingsRevision) return Promise.resolve(true);
+  const savedBeforeWrite = settingsSavedRevision;
   settingsWrite = (async () => {
     // Start on the next microtask so settingsWrite is assigned even if IPC throws.
     await Promise.resolve();
@@ -38,7 +39,9 @@ function flushSettingsSave() {
         if (result?.ok === false) throw Error('保存失败');
         settingsSavedRevision = revision;
       }
-      settingsSaveHint(''); showSettingsSavedToast(); return true;
+      settingsSaveHint('');
+      if (settingsToastRevision > savedBeforeWrite) showSettingsSavedToast(); else hideSettingsToast();
+      return true;
     } catch {
       // Keep the edited values and the pending revision for a safe retry.
       settingsSaveHint('保存失败 · 点击重试', true);
@@ -48,22 +51,22 @@ function flushSettingsSave() {
   })();
   return settingsWrite;
 }
-function queueSettingsSave(patch) {
+function queueSettingsSave(patch, { silent = false } = {}) {
   const next = { ...settings, ...patch };
   if (patch.appearance) next.appearance = { ...settings.appearance, ...patch.appearance };
-  if (JSON.stringify(next) !== JSON.stringify(settings)) { settings = next; ++settingsRevision; }
+  if (JSON.stringify(next) !== JSON.stringify(settings)) { settings = next; ++settingsRevision; if (!silent) settingsToastRevision = settingsRevision; }
   return flushSettingsSave();
 }
 function installSettingsAutosave() {
-  const textFields = { settingsObsidian: 'obsidianRoot', settingsSteamKey: 'steamApiKey', settingsSteamId: 'steamId', settingsGoogleBooksKey: 'googleBooksApiKey', settingsWebdavUrl: 'webdavUrl', settingsWebdavUsername: 'webdavUsername', settingsWebdavPassword: 'webdavPassword', settingsWebdavPath: 'webdavRemotePath', settingsDisguiseVideoUrl: 'disguiseVideoUrl', settingsDisguiseProfile: 'disguiseProfile' };
+  const textFields = { settingsObsidian: 'obsidianRoot', settingsSteamKey: 'steamApiKey', settingsSteamId: 'steamId', settingsGoogleBooksKey: 'googleBooksApiKey', settingsWebdavUrl: 'webdavUrl', settingsWebdavUsername: 'webdavUsername', settingsWebdavPassword: 'webdavPassword', settingsWebdavPath: 'webdavRemotePath', settingsDisguiseVideoUrl: 'disguiseVideoUrl' };
   const appearanceFields = { settingsTheme: 'theme', settingsAccent: 'accent', settingsDefaultView: 'defaultView', settingsAnimations: 'animations' };
-  const checkFields = { settingsConfirmDelete: 'confirmBeforeDelete', settingsAutoRefresh: 'autoRefreshMetadata' };
+  const checkFields = { settingsConfirmDelete: 'confirmBeforeDelete', settingsAutoRefresh: 'autoRefreshMetadata', settingsPositiveEnergy: 'positiveEnergyEnabled' };
   const changed = event => {
     const field = event.target, id = field.id; let patch;
     if (textFields[id]) patch = { [textFields[id]]: field.type === 'password' ? field.value : field.value.trim() };
     else if (appearanceFields[id]) patch = { appearance: { [appearanceFields[id]]: field.type === 'checkbox' ? field.checked : field.value } };
     else if (checkFields[id]) patch = { [checkFields[id]]: field.checked };
-    if (patch) { queueSettingsSave(patch); if (patch.appearance) applyAppearance(); }
+    if (patch) { queueSettingsSave(patch, { silent: id === 'settingsPositiveEnergy' }); if (patch.appearance) applyAppearance(); if (id === 'settingsPositiveEnergy' && event.type === 'change') render(); }
   };
   $('settingsView').addEventListener('input', changed); $('settingsView').addEventListener('change', changed);
   const retry = () => { if ($('settingsSaved').classList.contains('save-failed')) flushSettingsSave(); };

@@ -9,7 +9,7 @@ function closeCardQuickEdit(){cardQuickEditor?.remove();cardQuickEditor=null;}
 function openCardQuickEdit(id,kind,point){
  closeCardQuickEdit();if(document.body.classList.contains('is-disguised'))return;
  const original=state.items.find(i=>i.id===id);if(!original)return;
- const labels={platform:'游戏平台 · 可多选',status:'条目状态',name:'资源名称',genres:'类型标签',categories:'自定义分类',rating:'个人评分',localPath:'本地路径',storeUrl:'商店 / 官方链接',resourceUrl:'购买 / 阅读链接'};
+ const labels={platform:'游戏平台',status:'条目状态',name:'资源名称',genres:'标签',categories:'分类',rating:'个人评分',localPath:'本地路径',storeUrl:'商店 / 官方链接',resourceUrl:'购买 / 阅读链接'};
  if(!labels[kind])return;
  const menu=document.createElement('section');menu.className='card-quick-editor';menu.dataset.kind=kind;menu.setAttribute('role','dialog');menu.setAttribute('aria-label',labels[kind]);cardQuickEditor=menu;
  let busy=false;const title=document.createElement('strong');title.textContent=labels[kind];menu.append(title);
@@ -34,12 +34,12 @@ function openCardQuickEdit(id,kind,point){
    const live=state.items.find(i=>i.id===id);if(!live)return;options.replaceChildren();
    const values=kind==='platform'?Object.entries(PlatformModel.labels):statusList(live.type).map(v=>[v,v]);
    for(const [value,label]of values){
-    const selected=kind==='platform'?PlatformModel.detect(live).includes(value):live.status===value,button=document.createElement('button');
-    button.type='button';button.dataset.quickValue=value;button.setAttribute('aria-pressed',String(selected));
-    button.innerHTML=(kind==='platform'?PlatformModel.icons({platforms:[value]}):value==='全成就'?TROPHY_MARK:'')+'<span>'+esc(label)+'</span><i>'+(selected?'✓':'')+'</i>';
+    const platformState=kind==='platform'?PlatformModel.state(live,value):'',selected=kind==='platform'?platformState!=='unchecked':live.status===value,button=document.createElement('button');
+    button.type='button';button.dataset.quickValue=value;button.setAttribute('aria-pressed',String(selected));if(kind==='platform'){button.classList.add('platform-quick-option');button.dataset.platformState=platformState;}
+    button.innerHTML=(kind==='platform'?PlatformModel.icons({platforms:[value],playedPlatforms:platformState==='played'?[value]:[]}):value==='全成就'?TROPHY_MARK:'')+'<span>'+esc(label)+'</span>'+(kind==='status'?'<i>'+(selected?'✓':'')+'</i>':'');
     button.onclick=async()=>{
      const current=state.items.find(i=>i.id===id);if(!current||busy)return;
-     const values=PlatformModel.detect(current),patch=kind==='platform'?{platforms:values.includes(value)?values.filter(v=>v!==value):[...values,value],platformsManual:true,fieldSources:{...current.fieldSources,platforms:'手动'}}:{status:value};
+     const patch=kind==='platform'?{...PlatformModel.cycle(current,value),fieldSources:{...current.fieldSources,platforms:'手动'}}:{status:value};
      if(await save(patch)&&cardQuickEditor===menu){if(kind==='status')closeCardQuickEdit();else draw();}
     };options.append(button);
    }

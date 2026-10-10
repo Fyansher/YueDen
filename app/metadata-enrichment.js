@@ -37,12 +37,15 @@ function sameEdition(a, b) {
 }
 function refreshMatch(item, candidates) {
   const entries = candidates.filter(entry => !String(entry.id || '').startsWith('offline') && !/离线/.test(entry.metadataSource || ''));
-  if (item.type === 'game' && item.steamAppId) return entries.find(entry => String(entry.steamAppId || entry.id) === String(item.steamAppId));
-  if (item.isbn) return entries.find(entry => entry.isbn === item.isbn);
-  const linked = entries.find(entry => item.storeUrl && entry.storeUrl?.replace(/\/$/,'') === item.storeUrl.replace(/\/$/,''));
-  if (linked) return linked;
-  const exact = entries.filter(entry => names(entry).includes(norm(item.name)) && (!item.developer || sameWork(item, entry)) && (!item.publisher || norm(item.publisher) === norm(entry.publisher)) && (!item.releaseDate || String(item.releaseDate).slice(0,4) === String(entry.releaseDate).slice(0,4)));
-  return exact.length === 1 ? exact[0] : null;
+  const first=entries[0];if(!first)return null;
+  const urls=value=>[value.storeUrl,...Object.values(value.platformLinks||{})].filter(Boolean).map(url=>String(url).replace(/\/$/,''));
+  const steamId=value=>{const explicit=String(value.steamAppId||'');if(/^\d+$/.test(explicit))return explicit;for(const url of urls(value)){const match=url.match(/store\.steampowered\.com\/app\/(\d+)(?:\/|$)/i);if(match)return match[1];}const id=String(value.id||''),source=String(value._sourceId||value.sourceId||value.metadataSource||'');return /^\d+$/.test(id)&&/(?:^|\b)steam(?:\b|$)/i.test(source)?id:'';};
+  const existingSteamId=steamId(item);if((item.type||'game')==='game'&&existingSteamId)return steamId(first)===existingSteamId?first:null;
+  if(item.isbn)return first.isbn===item.isbn?first:null;
+  const existingUrls=new Set(urls(item));if(existingUrls.size&&urls(first).some(url=>existingUrls.has(url)))return first;
+  const title=norm(item.name);if(!title)return null;
+  const exact=entries.filter(entry=>names(entry).includes(title)&&(!item.developer||!entry.developer||sameWork(item,entry))&&(!item.publisher||!entry.publisher||norm(item.publisher)===norm(entry.publisher))&&(!item.releaseDate||!entry.releaseDate||String(item.releaseDate).match(/\d{4}/)?.[0]===String(entry.releaseDate).match(/\d{4}/)?.[0]));
+  return exact.length===1&&exact[0]===first?first:null;
 }
 function fillMissing(base, extra, fields) {
   const output = { ...base, fieldSources: { ...base.fieldSources } }; let filled = false;

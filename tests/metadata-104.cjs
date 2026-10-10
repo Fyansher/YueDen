@@ -12,15 +12,15 @@ const resultUi=fs.readFileSync(path.join(__dirname,'../app/metadata-results.js')
 const html=fs.readFileSync(path.join(__dirname,'../app/index.html'),'utf8');
 const pkg=JSON.parse(fs.readFileSync(path.join(__dirname,'../app/package.json'),'utf8'));
 
-test('editor identity is compact, existing cover controls remain, and YueDen version is 1.0.4',()=>{
+test('editor identity is compact, existing cover controls remain, and YueDen version is 1.0.6',()=>{
   const form=html.slice(html.indexOf('<form id="editorForm">'),html.indexOf('</form>',html.indexOf('<form id="editorForm">')));
   assert.ok(form.indexOf('class="editor-top"')<form.indexOf('class="editor-fields"'));
   for(const token of ['id="coverPreview"','id="editCoverBtn"','id="fieldName"','id="fieldType"','id="steamAppIdField"','id="metadataBtn"','id="metadataCoverage"'])assert.ok(form.includes(token),token);
   assert.ok(form.includes('⌁ 获取元数据'));
   assert.match(renderer,/game&&platforms\.includes\('steam'\)/);
-  assert.equal(pkg.version,'1.0.4');
-  assert.equal(pkg.buildId,'1.0.4');
-  assert.match(html,/<small>1\.0\.4<\/small>/);
+  assert.equal(pkg.version,'1.0.6');
+  assert.equal(pkg.buildId,'1.0.6');
+  assert.match(html,/<small>1\.0\.6<\/small>/);
 });
 
 test('chosen primary source stays the baseline and other sources fill blanks only',()=>{
@@ -275,10 +275,11 @@ test('Steam search stays lightweight and selected candidates retain lazy detail 
   const end=main.indexOf('\nfunction decodeSteamHtml',begin);
   const searchCode=main.slice(begin,end);
   assert.match(searchCode,/preserveCandidateOrder/);
-  assert.doesNotMatch(searchCode,/steamRelevance/);
+  assert.match(searchCode,/steamRelevance/);
   assert.doesNotMatch(searchCode,/steamAppDetailsBatch|onlyBaseGames/);
   assert.doesNotMatch(searchCode,/steamui|SteamUI/);
-  for(const endpoint of ['steamSuggestSearch(query)','store.steampowered.com/api/storesearch/','steamcommunity.com/actions/SearchApps/','steamPagedSearch(query)'])assert.ok(searchCode.includes(endpoint),endpoint);
+  for(const endpoint of ['steamSuggestSearch(query,country)','steamPagedSearch(query,country)'])assert.ok(searchCode.includes(endpoint),endpoint);
+  assert.match(searchCode,/searchRegion\('hk'\)/);assert.match(searchCode,/searchRegion\('us'\)/);assert.match(main,/steamSuggestSearch\(query,country='hk'\)/);assert.match(main,/cc=\$\{String\(country\)\.toUpperCase\(\)\}/);
   assert.doesNotMatch(main,/steamUiBrowserSearch|steamUiResults|steamui\.com/i);
   const typeStart=main.indexOf('async function steamAppDetailsBatch');
   const typeCheck=main.slice(typeStart,main.indexOf('async function steamAppDetails(appid)',typeStart));
@@ -343,10 +344,10 @@ test('Nintendo, PlayStation, Epic and DLsite defer product detail requests until
   const games=require('../app/game-sources').createGameSources({json:async()=>null,text:async url=>{dlsiteCalls.push(url);return url.includes('/fsr?')?'<dl class="work_img_main"><div data-worktype="ACT"></div><div class="work_name"><a href="https://www.dlsite.com/home/work/product_id/RJ123.html">Test Game</a></div><div class="maker_name"><a>Maker</a></div></dl>':'<h1 id="work_name">Test Game detail</h1>';},steam:async()=>[]});
   const dlsiteRows=await games.dlsite(query,()=>{},[query]);
   assert.equal(dlsiteRows.length,1);
-  assert.equal(dlsiteCalls.length,1);
+  assert.equal(dlsiteCalls.length,3);
   assert.equal(dlsiteRows[0].name,query);
   await games.resolveCandidate({...dlsiteRows[0],mediaType:'game',_sourceId:'dlsite'});
-  assert.equal(dlsiteCalls.length,2);
+  assert.equal(dlsiteCalls.length,4);
 });
 
 test('editor cancellation still guards late detail results and leaves manual fields protected',()=>{

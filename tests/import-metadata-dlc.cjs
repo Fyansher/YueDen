@@ -14,7 +14,7 @@ test('Steam keeps source order and does not fetch every candidate detail',()=>{
  assert.ok(games.some(row=>row.sourceProductType==='dlc'));
  const main=fs.readFileSync(path.join(__dirname,'../app/main.js'),'utf8'),start=main.indexOf('async function steamSearch'),end=main.indexOf('\nfunction decodeSteamHtml',start),search=main.slice(start,end);
  assert.match(search,/preserveCandidateOrder/);
- assert.doesNotMatch(search,/steamRelevance/);
+ assert.match(search,/steamRelevance/);
  assert.doesNotMatch(search,/steamAppDetailsBatch|onlyBaseGames/);
 });
 

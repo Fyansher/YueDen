@@ -6,19 +6,23 @@ const STATUS_BY_TYPE = StatusModel.lists;
 const STATUS_COLORS = ['#65d8b0', '#3bb5d3', '#f7bd6a', '#f18291', '#a995e8'];
 
 let state = { items: [], categories: [] };
-let settings = { obsidianRoot: '', steamApiKey: '', steamId: '', webdavUrl: '', webdavUsername: '', webdavPassword: '', webdavRemotePath: 'YueDen', deleteCloudSaveWithLocal: true, appearance: { theme: 'ocean', accent: '#65d8b0', density: 'comfortable', animations: true, defaultView: 'dashboard' }, disguiseEnabled: false, disguiseProfile: 'course' };
+let settings = { obsidianRoot: '', steamApiKey: '', steamId: '', webdavUrl: '', webdavUsername: '', webdavPassword: '', webdavRemotePath: 'YueDen', deleteCloudSaveWithLocal: true, appearance: { theme: 'ocean', accent: '#65d8b0', density: 'comfortable', animations: true, defaultView: 'dashboard' }, disguiseEnabled: false, positiveEnergyEnabled: false };
 let activeView = 'dashboard';
 // Library layout preferences are stored separately for each media page.
 let editorId = null;
 let currentRating = 0, editorRatingKnown=false;
 let candidateResults = [];
 let editorSavePaths = [];
-let tagKind = 'all';
+let tagKinds = new Set();
+let tagManagementSelection = new Set(), tagManagementAnchor = null, tagManagementPaint = null, tagManagementSuppressClickUntil = 0;
+let tagDeletionBusy = false;
 let toastTimer = null;
 let metadataRequestId = 0;
 const resourceFilters = new ResourceFilters();
+const POSITIVE_ENERGY_TAGS = new Set(['NSFW', 'R18', 'R18+']);
 let backupRenderVersion = 0;
 let snapshotIndex = [], snapshotIndexGeneration = 0, snapshotSelection = new Set(), expandedSnapshotGroups = new Set(), snapshotAnchor = null, snapshotPaint = null, snapshotSuppressClickUntil = 0;
+const remoteSnapshotCache = new Map();
 let editorOriginalItem = null;
 const backupNoteTimers = new WeakMap(), backupNoteWrites = new WeakMap();
 
@@ -36,6 +40,9 @@ function formatWebdavCompareTimestamp(value) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
 }
 function typeOf(item) { return TYPE_NAMES[item.type] || '其他'; }
+function positiveEnergyTagKey(value) { return String(value ?? '').normalize('NFKC').trim().toUpperCase().replace(/[\s\-‐‑‒–—−]/g, ''); }
+function hasPositiveEnergyTag(item) { return [...(item?.genres || []), ...(item?.categories || [])].some(value => POSITIVE_ENERGY_TAGS.has(positiveEnergyTagKey(value))); }
+function visibleResourceItems() { const items = Array.isArray(state?.items) ? state.items : []; return settings?.positiveEnergyEnabled ? items.filter(item => !hasPositiveEnergyTag(item)) : items; }
 function statusList(type) { return STATUS_BY_TYPE[type] || STATUS_BY_TYPE.other; }
 function isCompleted(item) { return StatusModel.completed(item.status); }
 function isActive(item) { return ['进行中', '在看', '在读'].includes(item.status); }
@@ -116,35 +123,37 @@ function render() {
   if(activeView!=='settings')hideSettingsToast();
   $('localResourcesBtn')?.classList.toggle('hidden',!['game','movie','anime','manga','book'].includes(activeView)||settings.disguiseEnabled);
   $('librarySearchHeader').classList.toggle('hidden', !['all',...LocalModel.types].includes(activeView));
-  $('totalNavCount').textContent = state.items.length; setActiveNav(activeView); applyAppearance();
+  $('totalNavCount').textContent = visibleResourceItems().length; setActiveNav(activeView); applyAppearance();
   $('dashboardView').classList.toggle('hidden', activeView !== 'dashboard'); $('libraryView').classList.toggle('hidden', !['all',...LocalModel.types].includes(activeView)); $('categoriesView').classList.toggle('hidden', activeView !== 'categories'); $('settingsView').classList.toggle('hidden', activeView !== 'settings');
   if (activeView === 'dashboard') renderDashboard(); if (['all',...LocalModel.types].includes(activeView)) renderLibrary(); if (activeView === 'categories') renderCategories(); if (activeView === 'settings') { loadSettingsForm(); void refreshNetworkCacheSize(); }renderSnapshotSelectionUi();
 }
 
 function repairImage(image, index = 0) { if (image.dataset.fallback === '1') return; image.dataset.fallback = '1'; image.src = fallbackCover(image.alt, index); }
 function renderDashboard() {
-  const total = state.items.length;
-  const completed = state.items.filter(isCompleted).length;
-  const active = state.items.filter(isActive).length;
-  const hours = state.items.reduce((sum, item) => sum + resourceUsageHours(item), 0);
+  const items = visibleResourceItems();
+  const total = items.length;
+  const completed = items.filter(isCompleted).length;
+  const active = items.filter(isActive).length;
+  const hours = items.reduce((sum, item) => sum + resourceUsageHours(item), 0);
   const currentYear = String(new Date().getFullYear());
-  const yearItems = state.items.filter((item) => String(item.createdAt || '').startsWith(currentYear) || String(item.completedDate || '').startsWith(currentYear));
-  const typeCounts = Object.entries(TYPE_NAMES).map(([type, name]) => [type, name, state.items.filter((item) => item.type === type).length]).filter(([, , count]) => count);
+  const yearItems = items.filter((item) => String(item.createdAt || '').startsWith(currentYear) || String(item.completedDate || '').startsWith(currentYear));
+  const typeCounts = Object.entries(TYPE_NAMES).map(([type, name]) => [type, name, items.filter((item) => item.type === type).length]).filter(([, , count]) => count);
   const topType = [...typeCounts].sort((a, b) => b[2] - a[2])[0];
-  const genreCounts = {}; state.items.forEach((item) => (item.genres || []).forEach((genre) => { genreCounts[genre] = (genreCounts[genre] || 0) + 1; }));
+  const genreCounts = {}; items.forEach((item) => (item.genres || []).forEach((genre) => { genreCounts[genre] = (genreCounts[genre] || 0) + 1; }));
   const topGenre = Object.entries(genreCounts).sort((a, b) => b[1] - a[1])[0];
-  $('statGrid').innerHTML = [['总条目', total, '全部媒体收藏', ''], ['进行中', active, '正在体验的内容', 'accent'], ['完成率', total ? `${Math.round(completed / total * 100)}%` : '—', `${completed} 条已完成`, 'warn'], ['今年新增', yearItems.filter((item) => String(item.createdAt || '').startsWith(currentYear)).length, `${currentYear} 年记录`, ''], ['累计时长', `${hours.toFixed(1)}h`, '游玩 / 阅读 / 观看记录', ''], ['最常见类型', topType ? topType[1] : '—', topType ? `${topType[2]} 条资源` : '添加资源后生成', ''], ['偏好标签', topGenre ? topGenre[0] : '—', topGenre ? `${topGenre[1]} 次出现` : '等待标签数据', 'accent'], ['最近整理', formatDate([...state.items].sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))[0]?.createdAt), '最后一次添加或更新', '']].map(([label, value, hint, cls]) => `<article class="stat-card ${cls}"><span class="stat-label">${label}</span><strong>${value}</strong><small>${hint}</small></article>`).join('');
-  const statusCounts = {}; state.items.forEach((item) => { statusCounts[item.status] = (statusCounts[item.status] || 0) + 1; }); const statusEntries = Object.entries(statusCounts).sort((a, b) => b[1] - a[1]); const segments = total ? (() => { let cursor = 0; return statusEntries.map(([, count], index) => { const start = cursor; cursor += count / total * 360; return `${STATUS_COLORS[index % STATUS_COLORS.length]} ${start}deg ${cursor}deg`; }).join(', '); })() : '#223243 0deg 360deg';
+  $('statGrid').innerHTML = [['总条目', total, '全部媒体收藏', ''], ['进行中', active, '正在体验的内容', 'accent'], ['完成率', total ? `${Math.round(completed / total * 100)}%` : '—', `${completed} 条已完成`, 'warn'], ['今年新增', yearItems.filter((item) => String(item.createdAt || '').startsWith(currentYear)).length, `${currentYear} 年记录`, ''], ['累计时长', `${hours.toFixed(1)}h`, '游玩 / 阅读 / 观看记录', ''], ['最常见类型', topType ? topType[1] : '—', topType ? `${topType[2]} 条资源` : '添加资源后生成', ''], ['偏好标签', topGenre ? topGenre[0] : '—', topGenre ? `${topGenre[1]} 次出现` : '等待标签数据', 'accent'], ['最近整理', formatDate([...items].sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))[0]?.createdAt), '最后一次添加或更新', '']].map(([label, value, hint, cls]) => `<article class="stat-card ${cls}"><span class="stat-label">${label}</span><strong>${value}</strong><small>${hint}</small></article>`).join('');
+  const statusCounts = {}; items.forEach((item) => { statusCounts[item.status] = (statusCounts[item.status] || 0) + 1; }); const statusEntries = Object.entries(statusCounts).sort((a, b) => b[1] - a[1]); const segments = total ? (() => { let cursor = 0; return statusEntries.map(([, count], index) => { const start = cursor; cursor += count / total * 360; return `${STATUS_COLORS[index % STATUS_COLORS.length]} ${start}deg ${cursor}deg`; }).join(', '); })() : '#223243 0deg 360deg';
   $('donut').style.background = `conic-gradient(${segments})`; $('donutTotal').textContent = total; $('statusLegend').innerHTML = statusEntries.length ? statusEntries.slice(0, 6).map(([status, count], index) => `<div class="legend-item"><span class="legend-dot" style="background:${STATUS_COLORS[index % STATUS_COLORS.length]}"></span><span>${esc(status)}</span><strong>${count}</strong></div>`).join('') : '<div class="legend-item"><span>添加资源后会显示状态分布</span></div>';
-  const recent = [...state.items].sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0)).slice(0, 5); $('recentList').innerHTML = recent.length ? recent.map((item) => `<div class="recent-item" data-open-id="${esc(item.id)}"><img class="recent-cover" src="${esc(item.cover || '')}" alt=""><div><div class="recent-name">${esc(item.name)}</div><div class="recent-status">${esc(typeOf(item))} · ${esc(item.status)}</div></div><span class="recent-date">${formatDate(item.createdAt)}</span></div>`).join('') : '<div class="empty-state" style="padding:35px 12px;border:0"><p>还没有添加资源，请前往资源页添加条目。</p></div>';
+  const recent = [...items].sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0)).slice(0, 5); $('recentList').innerHTML = recent.length ? recent.map((item) => `<div class="recent-item" data-open-id="${esc(item.id)}"><img class="recent-cover" src="${esc(item.cover || '')}" alt=""><div><div class="recent-name">${esc(item.name)}</div><div class="recent-status">${esc(typeOf(item))} · ${esc(item.status)}</div></div><span class="recent-date">${formatDate(item.createdAt)}</span></div>`).join('') : '<div class="empty-state" style="padding:35px 12px;border:0"><p>还没有添加资源，请前往资源页添加条目。</p></div>';
   all('.recent-item[data-open-id]').forEach((node) => node.addEventListener('click', () => openEditor(node.dataset.openId))); all('.recent-cover').forEach((image, index) => image.addEventListener('error', () => repairImage(image, index)));
   const maxType = Math.max(1, ...typeCounts.map(([, , count]) => count)); const topTags = Object.entries(genreCounts).sort((a, b) => b[1] - a[1]).slice(0, 8); const maxTag = Math.max(1, ...topTags.map(([, count]) => count)); const statusText = statusEntries.length ? statusEntries.slice(0, 4).map(([name, count]) => `${name} ${count}`).join(' · ') : '暂无状态记录';
-  $('insights').innerHTML = `<div class="insight-section"><h3>收藏结构</h3>${(typeCounts.length ? typeCounts : [['', '暂无数据', 0]]).map(([, name, count]) => `<div class="bar-row"><span>${name}</span><div class="bar-track"><div class="bar-fill" style="width:${count / maxType * 100}%"></div></div><strong>${count}</strong></div>`).join('')}</div><div class="insight-section"><h3>主题偏好</h3>${(topTags.length ? topTags : [['暂无标签', 0]]).map(([name, count]) => `<div class="bar-row"><span>${esc(name)}</span><div class="bar-track"><div class="bar-fill" style="width:${count / maxTag * 100}%"></div></div><strong>${count}</strong></div>`).join('')}</div><div class="insight-section insight-narrative"><h3>使用画像</h3><p>当前收藏以 <strong>${esc(topType ? topType[1] : '多种媒体')}</strong> 为主，状态分布为 <strong>${esc(statusText)}</strong>。</p><p>${topGenre ? `最常出现的主题是 <strong>${esc(topGenre[0])}</strong>，共覆盖 ${topGenre[1]} 条资源。` : '补充类型标签后，这里会生成更准确的偏好分析。'}</p></div>`;
+  $('insights').innerHTML = `<div class="insight-section"><h3>收藏结构</h3>${(typeCounts.length ? typeCounts : [['', '暂无数据', 0]]).map(([, name, count]) => `<div class="bar-row"><span>${name}</span><div class="bar-track"><div class="bar-fill" style="width:${count / maxType * 100}%"></div></div><strong>${count}</strong></div>`).join('')}</div><div class="insight-section"><h3>主题偏好</h3>${(topTags.length ? topTags : [['暂无标签', 0]]).map(([name, count]) => `<div class="bar-row"><span>${esc(name)}</span><div class="bar-track"><div class="bar-fill" style="width:${count / maxTag * 100}%"></div></div><strong>${count}</strong></div>`).join('')}</div><div class="insight-section insight-narrative"><h3>使用画像</h3><p>当前收藏以 <strong>${esc(topType ? topType[1] : '多种媒体')}</strong> 为主，状态分布为 <strong>${esc(statusText)}</strong>。</p><p>${topGenre ? `最常出现的主题是 <strong>${esc(topGenre[0])}</strong>，共覆盖 ${topGenre[1]} 条资源。` : '补充标签后，这里会生成更准确的偏好分析。'}</p></div>`;
   renderUsageChart();refreshUsage().then(()=>{if(activeView==='dashboard')renderUsageChart();});renderAnnualReview();
 }
 function renderAnnualReview() {
-  const years = Array.from(new Set([new Date().getFullYear().toString(), ...state.items.flatMap((item) => [String(item.createdAt || '').slice(0, 4), String(item.completedDate || '').slice(0, 4)]).filter((year) => /^\d{4}$/.test(year))])).sort().reverse(); const select = $('annualYear'); if (!select) return; const previous = select.value; select.innerHTML = years.map((year) => `<option value="${year}">${year} 年</option>`).join(''); select.value = years.includes(previous) ? previous : years[0]; const year = select.value;
-  const inYear = state.items.filter((item) => String(item.createdAt || '').startsWith(year) || String(item.completedDate || '').startsWith(year)); const added = inYear.filter((item) => String(item.createdAt || '').startsWith(year)); const completed = inYear.filter((item) => String(item.completedDate || '').startsWith(year) || (isCompleted(item) && String(item.updatedAt || '').startsWith(year))); const hours = inYear.reduce((sum, item) => sum + (Number(item.playtime) || 0), 0); const typeCounts = {}; const genreCounts = {}; inYear.forEach((item) => { typeCounts[item.type] = (typeCounts[item.type] || 0) + 1; (item.genres || []).forEach((genre) => { genreCounts[genre] = (genreCounts[genre] || 0) + 1; }); }); const topType = Object.entries(typeCounts).sort((a, b) => b[1] - a[1])[0]; const topGenre = Object.entries(genreCounts).sort((a, b) => b[1] - a[1])[0]; const monthDone = Array.from({ length: 12 }, (_, index) => { const month = String(index + 1).padStart(2, '0'); return { label: `${index + 1}月`, value: inYear.filter((item) => String(item.completedDate || '').slice(5, 7) === month).length + inYear.filter((item) => !item.completedDate && String(item.createdAt || '').slice(5, 7) === month).length }; }); const max = Math.max(1, ...monthDone.map((entry) => entry.value)); const top = [...inYear].filter((item) => Number(item.rating) > 0).sort((a, b) => Number(b.rating) - Number(a.rating)).slice(0, 3);
+  const items = visibleResourceItems();
+  const years = Array.from(new Set([new Date().getFullYear().toString(), ...items.flatMap((item) => [String(item.createdAt || '').slice(0, 4), String(item.completedDate || '').slice(0, 4)]).filter((year) => /^\d{4}$/.test(year))])).sort().reverse(); const select = $('annualYear'); if (!select) return; const previous = select.value; select.innerHTML = years.map((year) => `<option value="${year}">${year} 年</option>`).join(''); select.value = years.includes(previous) ? previous : years[0]; const year = select.value;
+  const inYear = items.filter((item) => String(item.createdAt || '').startsWith(year) || String(item.completedDate || '').startsWith(year)); const added = inYear.filter((item) => String(item.createdAt || '').startsWith(year)); const completed = inYear.filter((item) => String(item.completedDate || '').startsWith(year) || (isCompleted(item) && String(item.updatedAt || '').startsWith(year))); const hours = inYear.reduce((sum, item) => sum + (Number(item.playtime) || 0), 0); const typeCounts = {}; const genreCounts = {}; inYear.forEach((item) => { typeCounts[item.type] = (typeCounts[item.type] || 0) + 1; (item.genres || []).forEach((genre) => { genreCounts[genre] = (genreCounts[genre] || 0) + 1; }); }); const topType = Object.entries(typeCounts).sort((a, b) => b[1] - a[1])[0]; const topGenre = Object.entries(genreCounts).sort((a, b) => b[1] - a[1])[0]; const monthDone = Array.from({ length: 12 }, (_, index) => { const month = String(index + 1).padStart(2, '0'); return { label: `${index + 1}月`, value: inYear.filter((item) => String(item.completedDate || '').slice(5, 7) === month).length + inYear.filter((item) => !item.completedDate && String(item.createdAt || '').slice(5, 7) === month).length }; }); const max = Math.max(1, ...monthDone.map((entry) => entry.value)); const top = [...inYear].filter((item) => Number(item.rating) > 0).sort((a, b) => Number(b.rating) - Number(a.rating)).slice(0, 3);
   $('annualSummary').innerHTML = [['新增条目', added.length], ['完成 / 看完', completed.length], ['投入时长', `${hours.toFixed(1)} 小时`], ['年度主轴', topType ? `${TYPE_LABELS[topType[0]] || topType[0]}` : '—']].map(([label, value]) => `<div class="annual-metric"><span>${label}</span><strong>${value}</strong></div>`).join('');
   const narrative = inYear.length ? `${year} 年你新增了 ${added.length} 条资源，完成或看完 ${completed.length} 条，累计记录 ${hours.toFixed(1)} 小时。内容主要集中在 <strong>${esc(topType ? (TYPE_LABELS[topType[0]] || topType[0]) : '多种媒体')}</strong>${topGenre ? `，最常出现的主题是 <strong>${esc(topGenre[0])}</strong>` : ''}。` : `${year} 年还没有足够的记录，添加资源并记录状态后会自动生成年度报告。`;
   $('annualTimeline').innerHTML = `<div class="annual-chart">${monthDone.map((entry) => `<div class="month-bar"><div class="month-value" style="height:${entry.value / max * 100}%"><span>${entry.value || ''}</span></div><small>${entry.label}</small></div>`).join('')}</div><div class="annual-highlights"><h3>年度高光</h3>${top.length ? top.map((item) => `<button class="annual-item" data-open-id="${esc(item.id)}"><span>${stars(item.rating)}</span><strong>${esc(item.name)}</strong><small>${esc(typeOf(item))}</small></button>`).join('') : '<p>给年度收藏补充评分，就能看到年度高光。</p>'}<p class="annual-analysis">${narrative}</p></div>`; all('.annual-item[data-open-id]').forEach((node) => node.addEventListener('click', () => openEditor(node.dataset.openId)));
@@ -152,7 +161,7 @@ function renderAnnualReview() {
 function selectedFilterValues(id) { return resourceFilters.selected(id); }
 function filterItems() {
   const query = $('searchInput').value.trim().toLowerCase();
-  return librarySorting.apply(state.items.filter(item => {
+  return librarySorting.apply(visibleResourceItems().filter(item => {
     if (activeView !== 'all' && item.type !== activeView) return false;if(window.audioBrowser&&!audioBrowser.matches(item))return false;
     const saveFilter=activeView==='game'?($('saveFilter')?.value||'all'):'all';
     if(!resourceFilters.saveFilterMatches(saveFilter,snapshotsFor(item.id).length))return false;
@@ -161,9 +170,11 @@ function filterItems() {
   }));
 }
 function populateFilters() {
-  resourceFilters.render(state.items, renderLibrary);
+  const pageItems=visibleResourceItems().filter(item=>activeView==='all'||item.type===activeView);
+  resourceFilters.render(pageItems, renderLibrary);
 }
 function snapshotSyncStatusHtml(entry,itemId=entry.itemId){
+  if(entry.remoteOnly)return '<span class="snapshot-sync-button remote-only">仅云端</span>';
   if(entry.syncStatus==='已同步')return '<button type="button" class="snapshot-sync-button synced" disabled>已同步</button>';
   if(entry.syncStatus==='未配置云同步')return '<span class="snapshot-sync-button unconfigured">未配置</span>';
   return '<button type="button" class="snapshot-sync-button" data-snapshot-upload data-item-id="'+esc(itemId)+'" data-backup-id="'+esc(entry.id)+'">待同步</button>';
@@ -224,12 +235,18 @@ function installSnapshotPainting(){
 async function syncSnapshotButton(button){
   const itemId=button.dataset.itemId||button.closest('.backup-entry')?.querySelector('[data-item-id]')?.dataset.itemId,backupId=button.dataset.backupId;
   if(!itemId||!backupId||!settings.webdavUrl)return;
-  button.disabled=true;button.classList.add('uploading');button.textContent='上传中';
+  setSnapshotUploadProgress(itemId,backupId,true);
   try{
     const result=await native.syncBackupSnapshot(itemId,backupId,settings,'item-retry');if(!result?.ok)throw Error(result?.message||'存档上传失败');
     await refreshSnapshotIndex(true);if(snapshotCardMode())renderLibrary();if(editorId===itemId&&!$('editorBackdrop').classList.contains('hidden'))await renderBackupList();
     showToast('存档快照已同步');
-  }catch(error){button.disabled=false;button.classList.remove('uploading');button.textContent='待同步';await refreshSnapshotIndex(true);if(snapshotCardMode())renderLibrary();if(editorId===itemId&&!$('editorBackdrop').classList.contains('hidden'))await renderBackupList();showToast('存档上传失败：'+error.message,'error');}
+  }catch(error){setSnapshotUploadProgress(itemId,backupId,false);await refreshSnapshotIndex(true);if(snapshotCardMode())renderLibrary();if(editorId===itemId&&!$('editorBackdrop').classList.contains('hidden'))await renderBackupList();showToast('存档上传失败：'+error.message,'error');}
+}
+function setSnapshotUploadProgress(itemId,backupId,uploading){
+  for(const button of all('[data-snapshot-upload]')){
+    if(button.dataset.itemId!==itemId||button.dataset.backupId!==backupId)continue;
+    button.disabled=uploading;button.classList.toggle('uploading',uploading);button.textContent=uploading?'上传中':'待同步';
+  }
 }
 async function deleteSelectedSnapshots(){
   const visible=visibleSnapshotRows(),selected=visible.filter(entry=>snapshotSelection.has(entry.id));if(!selected.length)return;
@@ -249,16 +266,25 @@ function mergeRefreshedItem(current,original,updated) {
  for(const [key,value]of Object.entries(updated||{}))if(JSON.stringify(current[key])===JSON.stringify(original[key]))next[key]=value;
  return next;
 }
+function animateLibraryCard(card,keyframes,options) {
+ if(!card.animate)return;
+ card.style.willChange='transform';const animation=card.animate(keyframes,options),release=()=>{card.style.willChange='';};
+ animation.addEventListener('finish',release,{once:true});animation.addEventListener('cancel',release,{once:true});return animation;
+}
 
 function renderLibrary() {
- const previousCards=new Map([...$('libraryGrid').children].map(node=>[node.dataset.id,node.getBoundingClientRect()])); const previousLayout=$('libraryGrid').dataset.motionLayout;const previousView=$('libraryGrid').dataset.motionView;const previousIds=[...previousCards.keys()].join('|');
+ const grid=$('libraryGrid'),previousLayout=grid.dataset.motionLayout,previousView=grid.dataset.motionView,layout=currentLibraryLayout(),previousIds=[...grid.children].map(node=>node.dataset.id).join('|');
+ const motionAllowed=settings.appearance?.animations!==false&&!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+ const layoutChanged=Boolean(previousLayout&&previousLayout!==layout&&previousView===activeView),items=filterItems(),nextIds=items.map(item=>item.id).join('|');
+ const transitionNeeded=layoutChanged||previousView!==activeView||previousIds!==nextIds;
+ const previousCards=motionAllowed&&previousView===activeView&&transitionNeeded?(layoutChanged?captureLibraryCardRects(grid):captureVisibleLibraryCardRects(grid)):new Map(),previousCoverStages=layoutChanged?captureLibraryCoverStages(grid):null;
  $('saveFilter').classList.toggle('hidden',!resourceFilters.shouldShowSaveFilter(activeView));
  $('libraryEyebrow').textContent=activeView==='all'?'资源列表':'我的收藏';
  $('libraryHeading').innerHTML=`<span id="resultCount">0</span><span class="resource-count-unit">项资源</span>`;
- $('librarySearchHeader').prepend($('libraryHeading'));const actions=$('filterToggle').closest('.toolbar-actions');$('librarySearchHeader').append(actions);populateFilters();librarySorting.render();const items=filterItems();$('resultCount').textContent=items.length;const layout=currentLibraryLayout();const audioRows=window.audioBrowser?.render(items);document.querySelector('.view-switch').classList.toggle('hidden',Boolean(audioRows));if(audioRows){decorateLocalCards();renderLibrarySelection();renderSnapshotSelectionUi();return;}$('libraryGrid').classList.remove('audio-browser-list');$('libraryGrid').classList.add('library-grid');
+ $('librarySearchHeader').prepend($('libraryHeading'));const actions=$('filterToggle').closest('.toolbar-actions');$('librarySearchHeader').append(actions);populateFilters();librarySorting.render();$('resultCount').textContent=items.length;const audioRows=window.audioBrowser?.render(items);document.querySelector('.view-switch').classList.toggle('hidden',Boolean(audioRows));if(audioRows){decorateLocalCards();renderLibrarySelection();renderSnapshotSelectionUi();return;}grid.classList.remove('audio-browser-list');grid.classList.add('library-grid');
  all('.view-switch-btn').forEach(button=>{button.classList.toggle('active',button.dataset.layout===layout);button.setAttribute('aria-pressed',String(button.dataset.layout===layout));});
- for(const [name,value]of [['small','small'],['list','list'],['portrait','portrait']])$('libraryGrid').classList.toggle(name+'-layout',layout===value);
- $('libraryGrid').innerHTML=items.map(cardHtml).join('');$('libraryEmpty').classList.toggle('hidden',items.length>0);installSnapshotCardControls();
+ for(const [name,value]of [['small','small'],['list','list'],['portrait','portrait']])grid.classList.toggle(name+'-layout',layout===value);
+ grid.innerHTML=items.map(cardHtml).join('');observeLibraryCardVisibility(grid);const preservedCoverImages=reuseLibraryCoverStages(grid,previousCoverStages,items,layout);$('libraryEmpty').classList.toggle('hidden',items.length>0);installSnapshotCardControls();
  all('.resource-card').forEach(card=>{
   card.tabIndex=0;
   card.addEventListener('keydown',event=>{if(event.target===card&&['Enter',' '].includes(event.key)){event.preventDefault();card.click();}});
@@ -280,45 +306,167 @@ function renderLibrary() {
    }catch(error){showToast('操作未完成：'+error.message,'error');}
   });
  });
- all('.card-cover img.cover-art-image').forEach((image,index)=>repairCardCover(image,items.find(item=>item.id===image.closest('.resource-card').dataset.id)||{},index));
+ const itemById=new Map(items.map(item=>[item.id,item]));
+ all('.card-cover img.cover-art-image',grid).forEach((image,index)=>{if(preservedCoverImages.has(image))return;const item=itemById.get(image.closest('.resource-card')?.dataset.id)||{};repairCardCover(image,item,index);});
  renderLibrarySelection();renderSnapshotSelectionUi();decorateLocalCards();fitCardTags();
- $('libraryGrid').dataset.motionLayout=layout;
- $('libraryGrid').dataset.motionView=activeView;
- if(previousLayout&&previousLayout!==layout&&previousView===activeView&&settings.appearance?.animations!==false&&!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches){
-  for(const card of $('libraryGrid').children){const before=previousCards.get(card.dataset.id),after=card.getBoundingClientRect();if(!before||before.bottom<0||after.top>innerHeight)continue;card.animate?.([{transform:`translate(${before.left-after.left}px,${before.top-after.top}px) scale(${before.width/after.width},${before.height/after.height})`,transformOrigin:'top left',opacity:1},{transform:'none',transformOrigin:'top left',opacity:1}],{duration:420,easing:'cubic-bezier(.22,1.12,.36,1)'});}
- } else if(settings.appearance?.animations!==false&&!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches&&(previousView!==activeView||previousIds!==items.map(item=>item.id).join('|'))){
-  for(const card of $('libraryGrid').children){const after=card.getBoundingClientRect();if(after.top>innerHeight||after.bottom<0)continue;const before=previousView===activeView?previousCards.get(card.dataset.id):null;const dx=before?before.left-after.left:0,dy=before?before.top-after.top:10;card.animate?.([{transform:`translate(${dx}px,${dy}px) scale(${before?1:.97})`,opacity:1},{transform:'translate(0,-2px) scale(1.012,.992)',opacity:1,offset:.72},{transform:'none',opacity:1}],{duration:460,easing:'cubic-bezier(.22,.75,.25,1)'});}
+ grid.dataset.motionLayout=layout;
+ grid.dataset.motionView=activeView;
+ if(motionAllowed&&transitionNeeded){
+  for(const card of grid.children){const after=card.getBoundingClientRect();if(after.bottom<0||after.top>innerHeight)continue;const before=previousCards.get(card.dataset.id);
+   if(before&&layoutChanged){animateLibraryCard(card,[{transform:`translate(${before.left-after.left}px,${before.top-after.top}px) scale(${before.width/after.width},${before.height/after.height})`,transformOrigin:'top left',opacity:1},{transform:'none',transformOrigin:'top left',opacity:1}],{duration:420,easing:'cubic-bezier(.22,1.12,.36,1)'});}
+   else {const dx=before?before.left-after.left:0,dy=before?before.top-after.top:10;animateLibraryCard(card,[{transform:`translate(${dx}px,${dy}px) scale(${before?1:.97})`,opacity:1},{transform:'translate(0,-2px) scale(1.012,.992)',opacity:1,offset:.72},{transform:'none',opacity:1}],{duration:460,easing:'cubic-bezier(.22,.75,.25,1)'});}
+  }
  }
 }
  
+function tagSortPreferences() {
+  try {
+    const value = JSON.parse(localStorage.getItem('tagCardSort') || 'null');
+    return { field: ['manual', 'name', 'count'].includes(value?.field) ? value.field : 'manual', direction: value?.direction === 'desc' ? 'desc' : 'asc' };
+  } catch { return { field: 'manual', direction: 'asc' }; }
+}
+function saveTagSortPreferences(value) {
+  try { localStorage.setItem('tagCardSort', JSON.stringify(value)); }
+  catch { showToast('标签排序偏好保存失败', 'error'); }
+}
+function renderTagSortControl() {
+  return librarySorting.render({
+    hostId: 'tagSort', target: '#categoriesView .tag-tools', append: true,
+    fields: [['name', '名称'], ['count', '资源数']], getState: tagSortPreferences,
+    selectValue: preferences => preferences.field === 'manual' ? '' : preferences.field,
+    onFieldChange: field => { saveTagSortPreferences({ ...tagSortPreferences(), field: field || 'manual' }); renderCategories(); },
+    onDirectionChange: () => { const preferences = tagSortPreferences(); saveTagSortPreferences({ ...preferences, direction: preferences.direction === 'asc' ? 'desc' : 'asc' }); renderCategories(); },
+    title: '随时拖动卡片调整顺序；选择名称或资源数可切换排序方式'
+  });
+}
+function tagEntryKey(entry) { return entry.kind + ':' + entry.name; }
+function readTagCardOrder(entries = []) {
+  let stored = [];
+  try { const value = JSON.parse(localStorage.getItem('tagCardOrder') || '[]'); if (Array.isArray(value)) stored = value.filter(key => typeof key === 'string'); } catch {}
+  const valid = new Set(entries.map(tagEntryKey));
+  const remaining = [...entries].sort((a, b) => a.name.localeCompare(b.name, 'zh') || a.kind.localeCompare(b.kind));
+  return [...new Set(stored.filter(key => valid.has(key))), ...remaining.map(tagEntryKey).filter(key => !stored.includes(key))];
+}
+async function renameTagEntry(kind, oldName) {
+  const label = kind === 'category' ? '分类' : '标签';
+  const nextName = (await askPrompt('输入新的' + label + '名称：', oldName) || '').trim();
+  if (!nextName || nextName === oldName) return;
+  const existing = kind === 'category'
+    ? new Set([...(state.categories || []), ...state.items.flatMap(item => item.categories || [])])
+    : new Set(state.items.flatMap(item => item.genres || []));
+  if (existing.has(nextName)) { showToast('同类中已存在“' + nextName + '”', 'error'); return; }
+  const field = kind === 'category' ? 'categories' : 'genres';
+  const items = state.items.map(item => {
+    const values = item[field] || [];
+    return values.includes(oldName) ? { ...item, [field]: values.map(value => value === oldName ? nextName : value), updatedAt: new Date().toISOString() } : item;
+  });
+  const categories = kind === 'category' ? (state.categories || []).map(value => value === oldName ? nextName : value) : state.categories;
+  try {
+    state = await native.saveLibrary({ ...state, categories, items });
+    const filter = resourceFilters.values[kind === 'category' ? 'categoryFilter' : 'genreFilter'];
+    if (filter.delete(oldName)) filter.add(nextName);
+    const oldKey = kind + ':' + oldName, newKey = kind + ':' + nextName;
+    if (tagManagementSelection.delete(oldKey)) tagManagementSelection.add(newKey);
+    tagManagementAnchor = tagManagementAnchor === oldKey ? newKey : tagManagementAnchor;
+    try {
+      const order = JSON.parse(localStorage.getItem('tagCardOrder') || '[]');
+      localStorage.setItem('tagCardOrder', JSON.stringify(Array.isArray(order) ? order.map(key => key === oldKey ? newKey : key) : []));
+    } catch {}
+    renderCategories(); showToast(label + '已重命名');
+  } catch (error) { showToast(label + '重命名失败：' + error.message, 'error'); }
+}
+function syncTagToolbarAlignment() {
+  const toolbar = document.querySelector('#categoriesView .tag-tools'), search = toolbar?.querySelector('.tag-search'), sort = $('tagSort'), tools = $('tagSelectionTools');
+  const running = $('tagStatusFilters')?.querySelector('[data-status-label="进行中"]'), completed = $('tagStatusFilters')?.querySelector('[data-status-label="已完成"]');
+  if (!toolbar || !search || !sort || !tools || !running || !completed) return;
+  const clear = () => { toolbar.classList.add('tag-tools-natural'); search.style.flex = ''; search.style.width = ''; search.style.maxWidth = ''; sort.style.marginLeft = ''; tools.style.marginLeft = ''; };
+  const root = toolbar.getBoundingClientRect(), run = running.getBoundingClientRect(), done = completed.getBoundingClientRect();
+  const width = run.right - root.left, offset = done.left - run.right, gap = parseFloat(getComputedStyle(toolbar).columnGap) || 0;
+  if (Math.abs(run.top - done.top) > 3 || width < 150 || width + offset + sort.getBoundingClientRect().width + tools.getBoundingClientRect().width + gap * 2 > toolbar.clientWidth) { clear(); return; }
+  toolbar.classList.remove('tag-tools-natural');
+  search.style.flex = '0 0 ' + width + 'px'; search.style.width = width + 'px'; search.style.maxWidth = 'none';
+  sort.style.marginLeft = Math.max(0, offset - gap) + 'px'; tools.style.marginLeft = 'auto';
+}
+function renderTagManagementSelection() {
+  const tools = $('tagSelectionTools'); if (!tools) return;
+  for (const card of $('categoryGrid').querySelectorAll('.tag-card')) {
+    const key = card.dataset.tagType + ':' + card.dataset.tagName, checked = tagManagementSelection.has(key), input = card.querySelector('.tag-card-select input');
+    if (input) { input.checked = checked; input.setAttribute('aria-label', '选择' + (card.dataset.tagType === 'category' ? '分类 ' : '标签 ') + card.dataset.tagName); }
+    card.classList.toggle('management-selected', checked);
+  }
+  const count = $('tagSelectionCount'), remove = $('deleteTagSelection');
+  if (count) { count.textContent = tagManagementSelection.size ? '已勾选 ' + tagManagementSelection.size + ' 项' : ''; count.hidden = !tagManagementSelection.size; }
+  if (remove) { remove.disabled = !tagManagementSelection.size || tagDeletionBusy; remove.setAttribute('aria-disabled', String(remove.disabled)); remove.classList.toggle('is-disabled', remove.disabled); }
+  requestAnimationFrame(syncTagToolbarAlignment);
+}
+async function deleteTagEntries(keys = [...tagManagementSelection]) {
+  const wanted = [...new Set(keys)].filter(key => typeof key === 'string');
+  if (!wanted.length || tagDeletionBusy) return;
+  const categories = new Set(wanted.filter(key => key.startsWith('category:')).map(key => key.slice(9)));
+  const genres = new Set(wanted.filter(key => key.startsWith('genre:')).map(key => key.slice(6)));
+  if (!(await confirmDeletion('将删除所选的 ' + wanted.length + ' 个分类或标签，并从相关条目中移除对应关联。资源条目和本地文件不会删除。继续吗？'))) return;
+  tagDeletionBusy = true; renderTagManagementSelection();
+  try {
+    const items = state.items.map(item => {
+      const nextCategories = (item.categories || []).filter(name => !categories.has(name));
+      const nextGenres = (item.genres || []).filter(name => !genres.has(name));
+      return nextCategories.length === (item.categories || []).length && nextGenres.length === (item.genres || []).length ? item : { ...item, categories: nextCategories, genres: nextGenres, updatedAt: new Date().toISOString() };
+    });
+    state = await native.saveLibrary({ ...state, categories: (state.categories || []).filter(name => !categories.has(name)), items });
+    for (const name of categories) resourceFilters.values.categoryFilter.delete(name);
+    for (const name of genres) resourceFilters.values.genreFilter.delete(name);
+    tagManagementSelection.clear(); tagManagementAnchor = null;
+    const entries = new Map();
+    (state.categories || []).forEach(name => entries.set('category:' + name, true));
+    state.items.forEach(item => { (item.categories || []).forEach(name => entries.set('category:' + name, true)); (item.genres || []).forEach(name => entries.set('genre:' + name, true)); });
+    try { localStorage.setItem('tagCardOrder', JSON.stringify(readTagCardOrder([...entries.keys()].map(key => { const index = key.indexOf(':'); return { kind: key.slice(0, index), name: key.slice(index + 1) }; })))); } catch {}
+    renderCategories(); showToast('已删除所选分类和标签');
+  } catch (error) { showToast('删除分类或标签失败：' + error.message, 'error'); }
+  finally { tagDeletionBusy = false; renderTagManagementSelection(); }
+}
 function renderCategories() {
   renderTagStatusFilters();
-  const grid = $('categoryGrid');
-  const keyOf = node => node.dataset.tagType + ':' + node.dataset.tagName;
+  renderTagSortControl();
+  const grid = $('categoryGrid'), keyOf = node => node.dataset.tagType + ':' + node.dataset.tagName;
   const positions = new Map([...grid.querySelectorAll('.tag-card')].map(node => [keyOf(node), node.getBoundingClientRect()]));
   const search = ($('categorySearch')?.value || '').trim().toLowerCase();
-  const matched = state.items.filter(item => resourceFilters.matches(item));
+  const items = visibleResourceItems(), matched = items.filter(item => resourceFilters.matches(item));
   const hasSelection = Object.values(resourceFilters.values).some(values => values.size) || resourceFilters.hasCompletion();
   const possible = new Set();
   matched.forEach(item => { (item.genres || []).forEach(tag => possible.add('genre:' + tag)); (item.categories || []).forEach(tag => possible.add('category:' + tag)); });
   const entries = new Map();
-  const add = (kind, name) => { const key = kind + ':' + name; if (!entries.has(key)) entries.set(key, { kind, name, count: 0 }); };
-  state.categories.forEach(name => add('category', name));
-  state.items.forEach(item => { (item.categories || []).forEach(name => add('category', name)); (item.genres || []).forEach(name => add('genre', name)); });
+  const add = (kind, name) => { if (settings.positiveEnergyEnabled && POSITIVE_ENERGY_TAGS.has(positiveEnergyTagKey(name))) return; const key = kind + ':' + name; if (!entries.has(key)) entries.set(key, { kind, name, count: 0 }); };
+  (state.categories || []).forEach(name => add('category', name));
+  items.forEach(item => { (item.categories || []).forEach(name => add('category', name)); (item.genres || []).forEach(name => add('genre', name)); });
+  if (settings.positiveEnergyEnabled) for (const key of [...tagManagementSelection]) if (POSITIVE_ENERGY_TAGS.has(positiveEnergyTagKey(key.slice(key.indexOf(':') + 1)))) tagManagementSelection.delete(key);
   matched.forEach(item => { (item.categories || []).forEach(name => entries.get('category:' + name).count++); (item.genres || []).forEach(name => entries.get('genre:' + name).count++); });
   const selected = entry => resourceFilters.selected(entry.kind === 'genre' ? 'genreFilter' : 'categoryFilter').includes(entry.name);
-  const filtered = [...entries.values()].filter(entry => (selected(entry) || (!hasSelection || possible.has(entry.kind + ':' + entry.name))) && (tagKind === 'all' || entry.kind === tagKind) && (!search || entry.name.toLowerCase().includes(search))).sort((a,b) => a.name.localeCompare(b.name, 'zh') || a.kind.localeCompare(b.kind));
+  const prefs = tagSortPreferences(), order = readTagCardOrder([...entries.values()]), orderIndex = new Map(order.map((key, index) => [key, index]));
+  grid.dataset.sortMode = prefs.field;
+  const filtered = [...entries.values()].filter(entry => (selected(entry) || (!hasSelection || possible.has(tagEntryKey(entry)))) && (!tagKinds.size || tagKinds.has(entry.kind)) && (!search || entry.name.toLowerCase().includes(search)));
+  filtered.sort((a, b) => {
+    if (prefs.field === 'manual') return ((orderIndex.get(tagEntryKey(a)) ?? Number.MAX_SAFE_INTEGER) - (orderIndex.get(tagEntryKey(b)) ?? Number.MAX_SAFE_INTEGER)) * (prefs.direction === 'desc' ? -1 : 1) || a.name.localeCompare(b.name, 'zh');
+    const primary = prefs.field === 'count' ? a.count - b.count : a.name.localeCompare(b.name, 'zh');
+    return primary * (prefs.direction === 'desc' ? -1 : 1) || a.name.localeCompare(b.name, 'zh') || a.kind.localeCompare(b.kind);
+  });
   let tools = $('tagSelectionTools');
-  if (!tools) { tools = document.createElement('div'); tools.id = 'tagSelectionTools'; tools.className = 'tag-selection-tools'; grid.before(tools); }
-  $('categoriesView').querySelector('.tag-tools').append(tools);
-  tools.innerHTML = '<p class="tag-selection-hint">再次点击已选标签可取消；仅显示还能匹配的标签。</p><div><button type="button" class="secondary-button" id="resetTagSelection">清除选择</button> <button type="button" class="add-button" id="viewTagResults">查看匹配资源（' + matched.length + '） →</button></div>';
-  $('resetTagSelection').onclick = () => { resourceFilters.clear(); renderCategories(); };
-  $('viewTagResults').onclick = () => { activeView = 'all'; render(); $('filters').classList.remove('hidden'); };
-  grid.innerHTML = filtered.length ? filtered.map(entry => '<article tabindex="0" role="button" aria-pressed="' + selected(entry) + '" class="category-card tag-card' + (selected(entry) ? ' selected' : '') + '" data-tag-name="' + esc(entry.name) + '" data-tag-type="' + entry.kind + '"><span class="tag-kind">' + (entry.kind === 'category' ? '分类' : '类型标签') + (selected(entry) ? ' · 已选中 ✓' : '') + '</span><strong>' + esc(entry.name) + '</strong><small>' + entry.count + ' 条匹配资源</small></article>').join('') : '<div class="empty-state"><h3>没有匹配的标签</h3><p>可清除选择或搜索条件。</p></div>';
+  if (!tools) { tools = document.createElement('div'); tools.id = 'tagSelectionTools'; tools.className = 'tag-selection-tools'; }
+  document.querySelector('#categoriesView .tag-tools')?.append(tools);
+  if (tools) {
+    tools.innerHTML = '<span id="tagSelectionCount" class="tag-selection-count" aria-live="polite"></span><div class="tag-selection-actions"><button type="button" id="deleteTagSelection" class="batch-icon batch-delete" aria-label="删除所选分类和标签" title="删除所选项">' + DELETE_ICON + '</button><button type="button" class="secondary-button" id="resetTagSelection">清除选择</button><button type="button" class="add-button" id="viewTagResults">查看匹配资源（' + matched.length + '） →</button></div>';
+    $('resetTagSelection').onclick = () => { tagManagementSelection.clear(); tagManagementAnchor = null; tagKinds.clear(); resourceFilters.clearTagFilters(); renderCategories(); };
+    $('viewTagResults').onclick = () => { activeView = 'all'; render(); $('filters').classList.remove('hidden'); };
+    $('deleteTagSelection').onclick = () => { if (tagManagementSelection.size && !tagDeletionBusy) void deleteTagEntries(); };
+  }
+  grid.innerHTML = filtered.length ? filtered.map(entry => {
+    const key = tagEntryKey(entry), filterSelected = selected(entry), checked = tagManagementSelection.has(key), label = entry.kind === 'category' ? '分类' : '标签';
+    return '<article draggable="true" class="category-card tag-card' + (filterSelected ? ' selected' : '') + (checked ? ' management-selected' : '') + '" data-tag-name="' + esc(entry.name) + '" data-tag-type="' + entry.kind + '"><button type="button" class="tag-card-main" aria-pressed="' + filterSelected + '"><span class="tag-kind">' + label + '</span><strong>' + esc(entry.name) + '</strong><small>' + entry.count + ' 条匹配资源</small></button><label class="tag-card-select" title="勾选以批量管理"><input type="checkbox"' + (checked ? ' checked' : '') + '><span aria-hidden="true"></span></label></article>';
+  }).join('') : '<div class="empty-state"><h3>没有匹配的标签</h3><p>' + (search ? '当前搜索词没有匹配标签。' : '当前筛选条件下没有标签。') + '</p>' + (search ? '<button type="button" class="secondary-button" id="clearTagSearch">清除搜索</button>' : '') + '</div>';
+  const clearSearch = $('clearTagSearch');
+  if (clearSearch) clearSearch.onclick = () => { $('categorySearch').value = ''; renderCategories(); $('categorySearch').focus(); };
   grid.querySelectorAll('.tag-card').forEach(card => {
-    const toggle = () => { resourceFilters.toggle(card.dataset.tagType === 'genre' ? 'genreFilter' : 'categoryFilter', card.dataset.tagName); renderCategories(); [...grid.querySelectorAll('.tag-card')].find(node => keyOf(node) === keyOf(card))?.focus({ preventScroll: true }); };
-    card.addEventListener('click', toggle);
-    card.addEventListener('keydown', event => { if (['Enter', ' '].includes(event.key)) { event.preventDefault(); toggle(); } });
+    const toggle = () => { resourceFilters.toggle(card.dataset.tagType === 'genre' ? 'genreFilter' : 'categoryFilter', card.dataset.tagName); renderCategories(); [...grid.querySelectorAll('.tag-card')].find(node => keyOf(node) === keyOf(card))?.querySelector('.tag-card-main')?.focus({ preventScroll: true }); };
+    card.querySelector('.tag-card-main').addEventListener('click', toggle);
     if (settings.appearance?.animations === false || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches || !card.animate) return;
     const before = positions.get(keyOf(card)), after = card.getBoundingClientRect();
     const dx = before ? before.left - after.left : 0, dy = before ? before.top - after.top : 12;
@@ -329,6 +477,127 @@ function renderCategories() {
       { transform: 'translate(0,0) scale(1)', opacity: 1 }
     ], { duration: 560, easing: 'cubic-bezier(.22,.75,.25,1)' });
   });
+  renderTagManagementSelection();
+  requestAnimationFrame(syncTagToolbarAlignment);
+}
+function installTagManagement() {
+  const toolbar = document.querySelector('#categoriesView .tag-tools');
+  toolbar?.querySelector('.tag-tabs')?.remove();
+  renderTagSortControl();
+  $('categorySearch').addEventListener('input', renderCategories);
+  const grid = $('categoryGrid');
+  if (!$('tagStatusFilters')) { const section = document.createElement('section'); section.id = 'tagStatusFilters'; section.className = 'tag-status-section'; grid.before(section); }
+  let tools = $('tagSelectionTools');
+  if (!tools) { tools = document.createElement('div'); tools.id = 'tagSelectionTools'; tools.className = 'tag-selection-tools'; }
+  toolbar?.append(tools);
+  const cardKey = card => card?.dataset.tagType + ':' + card?.dataset.tagName;
+  const syncSelection = () => renderTagManagementSelection();
+  grid.addEventListener('contextmenu', event => {
+    const name = event.target.closest('.tag-card-main strong'), card = name?.closest('.tag-card');
+    if (!card) return;
+    event.preventDefault(); event.stopPropagation();
+    void renameTagEntry(card.dataset.tagType, card.dataset.tagName);
+  });
+  grid.addEventListener('pointerdown', event => {
+    const target = event.target.closest('.tag-card-select'); if (!target || event.button !== 0) return;
+    const card = target.closest('.tag-card'); if (!card) return;
+    event.preventDefault(); event.stopImmediatePropagation();
+    const visible = [...grid.querySelectorAll('.tag-card')].map(cardKey), key = cardKey(card);
+    const base = event.shiftKey && !event.ctrlKey ? [] : [...tagManagementSelection];
+    const selected = event.shiftKey || !tagManagementSelection.has(key);
+    const anchor = event.shiftKey && tagManagementAnchor ? tagManagementAnchor : key;
+    tagManagementAnchor = anchor;
+    tagManagementSelection = new Set(SelectionRange.apply(visible, anchor, key, base, selected));
+    tagManagementPaint = { pointerId: event.pointerId, lastKey: key, visible, base, anchor, selected };
+    grid.classList.add('is-painting'); grid.setPointerCapture?.(event.pointerId); syncSelection();
+  }, true);
+  grid.addEventListener('pointermove', event => {
+    const paint = tagManagementPaint; if (!paint || paint.pointerId !== event.pointerId) return;
+    event.preventDefault();
+    const card = document.elementFromPoint(event.clientX, event.clientY)?.closest('#categoryGrid .tag-card'), key = cardKey(card);
+    if (!card || key === paint.lastKey) return;
+    paint.lastKey = key;
+    tagManagementSelection = new Set(SelectionRange.apply([...grid.querySelectorAll('.tag-card')].map(cardKey), paint.anchor, key, paint.base, paint.selected));
+    syncSelection();
+  });
+  const stopPaint = event => {
+    if (!tagManagementPaint || event.pointerId !== tagManagementPaint.pointerId) return;
+    tagManagementPaint = null; tagManagementSuppressClickUntil = Date.now() + 450; grid.classList.remove('is-painting');
+    if (grid.hasPointerCapture?.(event.pointerId)) grid.releasePointerCapture(event.pointerId);
+  };
+  grid.addEventListener('pointerup', stopPaint); grid.addEventListener('pointercancel', stopPaint); grid.addEventListener('lostpointercapture', stopPaint);
+  grid.addEventListener('click', event => {
+    if (Date.now() < tagManagementSuppressClickUntil) { event.preventDefault(); event.stopImmediatePropagation(); }
+  }, true);
+  grid.addEventListener('change', event => {
+    const input = event.target.closest('.tag-card-select input'); if (!input) return;
+    const key = cardKey(input.closest('.tag-card'));
+    if (input.checked) tagManagementSelection.add(key); else tagManagementSelection.delete(key);
+    tagManagementAnchor = key; syncSelection();
+  });
+
+  let dragged = null, draggedKeys = [], draggedInitialOrder = [];
+  const clearDrag = () => {
+    grid.querySelectorAll('.tag-card.dragging,.tag-card.drag-over').forEach(card => card.classList.remove('dragging', 'drag-over'));
+    $('deleteTagSelection')?.classList.remove('drag-delete-over'); dragged = null; draggedKeys = []; draggedInitialOrder = [];
+  };
+  grid.addEventListener('dragstart', event => {
+    const card = event.target.closest('.tag-card'); if (!card || event.target.closest('.tag-card-select')) return;
+    dragged = card; const key = cardKey(card);
+    draggedInitialOrder = [...grid.querySelectorAll('.tag-card')].map(cardKey);
+    draggedKeys = tagManagementSelection.has(key) ? [...grid.querySelectorAll('.tag-card')].map(cardKey).filter(value => tagManagementSelection.has(value)) : [key];
+    draggedKeys.forEach(value => [...grid.querySelectorAll('.tag-card')].find(node => cardKey(node) === value)?.classList.add('dragging'));
+    event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('text/plain', key);
+  }, true);
+  grid.addEventListener('dragover', event => {
+    if (!dragged || !grid.contains(event.target)) return;
+    event.preventDefault(); event.dataTransfer.dropEffect = 'move';
+    let target = event.target.closest('.tag-card');
+    if (!target) target = [...grid.querySelectorAll('.tag-card')].filter(card => !draggedKeys.includes(cardKey(card))).sort((a, b) => {
+      const distance = card => { const rect = card.getBoundingClientRect(); return Math.hypot(event.clientX - rect.left - rect.width / 2, event.clientY - rect.top - rect.height / 2); };
+      return distance(a) - distance(b);
+    })[0];
+    if (!target || draggedKeys.includes(cardKey(target))) return;
+    const rect = target.getBoundingClientRect(), after = event.clientY > rect.bottom ? true : event.clientY < rect.top ? false : event.clientX > rect.left + rect.width / 2;
+    const nodes = [...grid.querySelectorAll('.tag-card')], moving = nodes.filter(card => draggedKeys.includes(cardKey(card))), stationary = nodes.filter(card => !draggedKeys.includes(cardKey(card)));
+    const at = stationary.indexOf(target) + (after ? 1 : 0), ordered = [...stationary.slice(0, at), ...moving, ...stationary.slice(at)];
+    if (ordered.some((card, index) => card !== nodes[index])) ReorderMotion.move(grid, ordered, { exclude: moving });
+  }, true);
+  tools?.addEventListener('dragover', event => {
+    if (!dragged || !event.target.closest('#deleteTagSelection')) return;
+    event.preventDefault(); event.dataTransfer.dropEffect = 'move'; $('deleteTagSelection')?.classList.add('drag-delete-over');
+  });
+  document.addEventListener('drop', async event => {
+    if (!dragged) return;
+    const keys = [...draggedKeys], deleteTarget = event.target.closest?.('#deleteTagSelection');
+    if (deleteTarget) {
+      event.preventDefault(); event.stopPropagation(); clearDrag(); await deleteTagEntries(keys); return;
+    }
+    if (grid.contains(event.target)) {
+      event.preventDefault();
+      const visibleOrder = [...grid.querySelectorAll('.tag-card')].map(cardKey);
+      if (visibleOrder.every((key, index) => key === draggedInitialOrder[index])) { clearDrag(); return; }
+      const visible = new Set(visibleOrder), entries = new Map();
+      (state.categories || []).forEach(name => entries.set('category:' + name, { kind: 'category', name }));
+      state.items.forEach(item => { (item.categories || []).forEach(name => entries.set('category:' + name, { kind: 'category', name })); (item.genres || []).forEach(name => entries.set('genre:' + name, { kind: 'genre', name })); });
+      const order = readTagCardOrder([...entries.values()]); let index = 0;
+      const next = order.map(key => visible.has(key) ? visibleOrder[index++] : key);
+      try { localStorage.setItem('tagCardOrder', JSON.stringify(next)); } catch { showToast('自定义顺序保存失败', 'error'); }
+      saveTagSortPreferences({ ...tagSortPreferences(), field: 'manual', direction: 'asc' });
+      clearDrag(); renderCategories(); showToast('已保存自定义顺序'); return;
+    }
+    clearDrag(); renderCategories();
+  }, true);
+  document.addEventListener('dragend', () => { const abandoned = Boolean(dragged); clearDrag(); if (abandoned) renderCategories(); }, true);
+  tools?.addEventListener('click', event => {
+    if (event.target.closest('#deleteTagSelection') && !tagManagementSelection.size) { event.preventDefault(); event.stopPropagation(); }
+  }, true);
+  if (window.ResizeObserver && toolbar) {
+    let scheduled = false;
+    const schedule = () => { if (scheduled) return; scheduled = true; requestAnimationFrame(() => { scheduled = false; syncTagToolbarAlignment(); }); };
+    const observer = new ResizeObserver(schedule); observer.observe(toolbar); observer.observe($('tagStatusFilters'));
+    window.addEventListener('resize', schedule);
+  }
 }
 function setStatusOptions(type, selected = '') { selected = StatusModel.normalize(selected, type); const values = statusList(type); $('fieldStatus').innerHTML = values.map((value) => `<option value="${esc(value)}">${value === '全成就' ? '🏆 ' : ''}${esc(value)}</option>`).join(''); $('fieldStatus').value = values.includes(selected) ? selected : values[0]; updateCompletedDateState(); updateTypeFields(type); }
 function updateTypeFields(type = $('fieldType')?.value || 'game') {
@@ -336,7 +605,7 @@ function updateTypeFields(type = $('fieldType')?.value || 'game') {
   const game = type === 'game', publication = ['book', 'manga'].includes(type), media = ['movie', 'anime'].includes(type);
   const localOnly=['audio','software','document','unknown_application','unknown_collection'].includes(type);
   $('editorForm').dataset.mediaType = type;window.audioEditor?.show(type);
-  show('.game-only', game); const platforms=PlatformModel.detect({...editorMetadata,storeUrl:valueFor('fieldStoreUrl'),steamAppId:valueFor('fieldSteamAppId')});show('#steamAppIdField',game&&platforms.includes('steam')); show('#pickSavePathsBtn, #backupSaveBtn', game);
+  show('.game-only', game); const platforms=PlatformModel.detect({...editorMetadata,storeUrl:valueFor('fieldStoreUrl'),steamAppId:valueFor('fieldSteamAppId')});show('#steamAppIdField',game&&platforms.includes('steam')); show('#detectSavePathsBtn, #pickSavePathsBtn, #backupSaveBtn', game);
   renderPlatformPicker();
   show('.media-only', media); show('.publication-only', publication); show('.resource-only', !game);
   show('#metadataBtn',!localOnly||type==='audio');$('metadataBtn').parentElement.classList.toggle('hidden',localOnly&&type!=='audio'&&!editorMetadata.metadataSource);
@@ -360,12 +629,20 @@ function updateCompletedDateState() { const field=$('fieldCompletedDate');field.
 function setRating(value) { setStarSlider(value); }
 function valueFor(id) { return $(id)?.value?.trim() || ''; } function splitValues(value) { return value.split(/[,，、]/).map((entry) => entry.trim()).filter(Boolean); }
 function formatBytes(value) { const bytes = Number(value) || 0; if (bytes < 1024) return bytes + ' B'; if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'; if (bytes < 1024 * 1024 * 1024) return (bytes / 1024 / 1024).toFixed(1) + ' MB'; return (bytes / 1024 / 1024 / 1024).toFixed(2) + ' GB'; }
-async function refreshSnapshotIndex(rerender=true){const version=++snapshotIndexGeneration;try{const rows=await native.listAllBackups();if(version===snapshotIndexGeneration)snapshotIndex=Array.isArray(rows)?rows:[];}catch(error){if(version===snapshotIndexGeneration){snapshotIndex=[];showToast('读取存档快照失败：'+error.message,'error');}}if(rerender&&activeView==='game')renderLibrary();return snapshotIndex;}
+async function refreshSnapshotIndex(rerender=true,clearRemoteCache=true){if(clearRemoteCache)remoteSnapshotCache.clear();const version=++snapshotIndexGeneration;try{const rows=await native.listAllBackups();if(version===snapshotIndexGeneration)snapshotIndex=Array.isArray(rows)?rows:[];}catch(error){if(version===snapshotIndexGeneration){snapshotIndex=[];showToast('读取存档快照失败：'+error.message,'error');}}if(rerender&&activeView==='game')renderLibrary();return snapshotIndex;}
 function snapshotsFor(itemId){return snapshotIndex.filter(entry=>entry.itemId===itemId).sort((a,b)=>Date.parse(b.createdAt||0)-Date.parse(a.createdAt||0));}
 function snapshotCardMode(){return activeView==='game'&&$('saveFilter')?.value==='has'&&currentLibraryLayout()==='list';}
 function snapshotSelectionMode(){return snapshotCardMode()&&Boolean(librarySelection?.active)&&!$('filters')?.classList.contains('hidden')&&!document.body.classList.contains('is-disguised');}
 function visibleSnapshotRows(){const allowed=new Set(filterItems().map(item=>item.id));return snapshotIndex.filter(entry=>allowed.has(entry.itemId));}
 function ensureBackupPanel() { return $('backupList'); }
+async function remoteBackupsFor(itemId){
+  if(!settings.webdavUrl)return [];
+  const key=[itemId,settings.webdavUrl,settings.webdavRemotePath,settings.webdavUsername].join('\n'),cached=remoteSnapshotCache.get(key);
+  if(cached&&cached.expires>Date.now())return cached.rows;
+  const result=await native.listRemoteBackups(itemId,settings);
+  if(!result?.ok)throw Error(result?.message||'读取云端存档列表失败');
+  const rows=Array.isArray(result.entries)?result.entries:[];remoteSnapshotCache.set(key,{rows,expires:Date.now()+20000});return rows;
+}
 async function renderBackupList() {
   ensureBackupPanel();
   const panel = $('backupList'), list = $('backupSnapshotRows'), itemId = editorId, version = ++backupRenderVersion;
@@ -375,15 +652,20 @@ async function renderBackupList() {
   if ($('fieldType').value !== 'game') { list.textContent = ''; return; }
   if (!itemId) { $('backupSnapshotCount').textContent = '0 份'; list.innerHTML = '<div class="backup-empty">暂无存档快照</div>'; return; }
   list.textContent = '正在读取存档快照…';
-  const backups = await native.listBackups(itemId);
+  let backups = await native.listBackups(itemId),remoteRows=[],remoteError='';
+  try{remoteRows=await remoteBackupsFor(itemId);}catch(error){remoteError=error.message;}
   if (editorId !== itemId || version !== backupRenderVersion) return;
-  $('backupSnapshotCount').textContent = (backups?.length||0) + ' 份';
+  const localIds=new Set(backups.map(entry=>entry.id));
+  const cloudOnly=remoteRows.filter(entry=>!localIds.has(entry.id)).map(entry=>({...entry,remoteOnly:true}));
+  backups=[...backups,...cloudOnly];
+  $('backupSnapshotCount').textContent = backups.length + ' 份'+(cloudOnly.length?'（'+cloudOnly.length+' 份仅在云端）':'');
   list.innerHTML = backups?.length ? backups.map(entry =>
-    '<div class="backup-entry"><div class="backup-entry-main"><strong>' + formatDateTime(entry.createdAt) +
-    '</strong><span>' + entry.files + ' 个文件 · 压缩存储 ' + formatBytes(entry.size) + '</span></div><input class="backup-note-input" type="text" data-item-id="' + esc(itemId) + '" data-backup-id="' + esc(entry.id) + '" value="' + esc(entry.note || '') + '" maxlength="2000" placeholder="进度备注" aria-label="' + esc(formatDateTime(entry.createdAt) + ' 存档备注') + '">' +
+    '<div class="backup-entry'+(entry.remoteOnly?' remote-backup-entry':'')+'"><div class="backup-entry-main"><strong>' + formatDateTime(entry.createdAt) +
+    '</strong><span>' + (Number(entry.files)||0) + ' 个文件 · '+(entry.remoteOnly?'云端压缩存储 ':'压缩存储 ') + formatBytes(entry.size) + (entry.remoteOnly?' · 选择切换时才下载':'')+'</span></div><input class="backup-note-input" type="text" data-item-id="' + esc(itemId) + '" data-backup-id="' + esc(entry.id) + '" value="' + esc(entry.note || '') + '" maxlength="2000" placeholder="进度备注" aria-label="' + esc(formatDateTime(entry.createdAt) + ' 存档备注') + '"'+(entry.remoteOnly?' disabled title="下载到本机后可编辑备注"':'')+'>' +
     snapshotSyncStatusHtml(entry,itemId) + '<button type="button" class="backup-restore" data-backup-id="' + esc(entry.id) +
-    '">切换</button><button type="button" class="backup-delete" data-backup-id="' + esc(entry.id) + '">删除</button></div>'
+    '"'+(entry.remoteOnly?' title="下载此快照并切换存档"':'')+'>切换</button><button type="button" class="backup-delete" data-backup-id="' + esc(entry.id) + '"'+(entry.remoteOnly?' title="删除云端存档"':'')+'>删除</button></div>'
   ).join('') : '<div class="backup-empty">暂无存档快照</div>';
+  if(remoteError&&settings.webdavUrl)list.insertAdjacentHTML('beforeend','<div class="backup-empty backup-remote-error">云端列表暂不可用：'+esc(remoteError)+'</div>');
   all('.backup-note-input', list).forEach(input => {
     input.dataset.savedValue = input.value.trim();
     input.addEventListener('input', () => scheduleBackupNoteSave(input));
@@ -397,13 +679,15 @@ async function renderBackupList() {
     if (!backup) return;
     const removing = button.classList.contains('backup-delete');
     const decision = removing
-      ? await confirmBackupDeletion('删除 ' + formatDateTime(backup.createdAt) + ' 的存档快照？此操作无法撤销。')
+      ? backup.remoteOnly?await askConfirm('从 WebDAV 云端删除 ' + formatDateTime(backup.createdAt) + ' 的存档快照？此操作无法撤销。',{title:'删除云端存档',confirmText:'删除',danger:true}):await confirmBackupDeletion('删除 ' + formatDateTime(backup.createdAt) + ' 的存档快照？此操作无法撤销。')
       : await askConfirm('切换到 ' + formatDateTime(backup.createdAt) + ' 的存档？当前文件可能被覆盖。', { title: '恢复存档前确认', confirmText: '确认切换', danger: true });
     if (!decision || editorId !== itemId) return;
     button.disabled = true;
     try {
-      const result = removing ? await native.deleteBackup(itemId, backup.id, { syncCloud: decision.syncCloud }) : await native.restoreBackup(itemId, backup.id);
+      const result = removing ? backup.remoteOnly?await native.deleteRemoteBackup(itemId,backup.id,settings):await native.deleteBackup(itemId, backup.id, { syncCloud: decision.syncCloud }) : backup.remoteOnly?await native.restoreRemoteBackup(itemId,backup.id,settings):await native.restoreBackup(itemId, backup.id);
       if (!result?.ok) throw Error(result?.message || '操作失败');
+      remoteSnapshotCache.clear();
+      if(!removing&&backup.remoteOnly&&result.paths){state=await native.loadLibrary();editorSavePaths=[...(state.items.find(entry=>entry.id===itemId)?.savePaths||result.paths)];updateSavePathHint();updateLinkButtons();}
       const remaining = await native.listBackups(itemId);
       if (removing && remaining.some(entry => entry.id === backup.id)) throw Error('快照仍然存在，请检查文件占用或权限');
       const item = state.items.find(entry => entry.id === itemId);
@@ -411,7 +695,7 @@ async function renderBackupList() {
       await refreshSnapshotIndex(true);
       if(snapshotCardMode())renderLibrary();
       if (editorId === itemId) await renderBackupList();
-      showToast(removing ? (result.message || '存档快照已删除') : '已切换到所选存档');
+      showToast(removing ? (result.message || '存档快照已删除') : backup.remoteOnly?'已下载并切换到所选存档':'已切换到所选存档');
     } catch (error) { showToast(error.message, 'error'); button.disabled = false; }
   }));
 }
@@ -441,10 +725,8 @@ async function persistBackupNote(input) {
   try { await write; } catch (error) { showToast(error.message, 'error'); }
 }
 function updateSavePathHint() {
-  const fullPath=editorSavePaths.join('；'),display=$('savePathDisplay'),open=$('savePathOpenBtn'),pick=$('pickSavePathsBtn'),backup=$('backupSaveBtn');
-  if(display)display.textContent=fullPath||'未设置存档位置';
-  if(open){open.disabled=!editorSavePaths.length;open.title=fullPath?'打开存档位置：'+fullPath:'未设置存档位置';open.setAttribute('aria-label',fullPath?'打开存档位置：'+fullPath:'未设置存档位置');}
-  if(pick)pick.textContent=editorSavePaths.length?'更改位置':'选择位置';
+  const backup=$('backupSaveBtn');
+  const rows=$('savePathRows');if(rows){rows.innerHTML=editorSavePaths.length?editorSavePaths.map((value,index)=>'<div class="save-path-row"><button type="button" class="save-path-open" data-open-save-path="'+index+'" title="打开存档位置：'+esc(value)+'" aria-label="打开存档位置 '+(index+1)+'：'+esc(value)+'"><span class="backup-path-icon" aria-hidden="true">📁</span><span class="backup-path-value">'+esc(value)+'</span></button><button type="button" class="save-path-clear" data-clear-save-path="'+index+'" aria-label="清除存档路径 '+(index+1)+'" title="清除路径">×</button></div>').join(''):'<div class="save-path-empty"><span class="backup-path-icon" aria-hidden="true">📁</span><span>未设置存档位置</span></div>';}
   if(backup)backup.disabled=!editorId||!editorSavePaths.length;
   const field=$('fieldSavePaths');if(field)field.value=JSON.stringify(editorSavePaths);
 }
@@ -498,7 +780,14 @@ async function applyCandidate(candidate) {
   if(hadPlaytime)for(const key of ['steamPlaytime','steamPlaytimeAt','playtimeSource'])editorMetadata[key]=before[key];
   if(manualTime)editorMetadata.playtimeSource='手动';
   if(before.platformsManual){editorMetadata.platforms=before.platforms;editorMetadata.platformsManual=true;editorMetadata.fieldSources.platforms='手动';}
-  else if(type==='game'&&Array.isArray(candidate.platforms)&&candidate.platforms.length){editorMetadata.platforms=[...new Set([...(before.platforms||[]),...candidate.platforms])];editorMetadata.platformLinks={...before.platformLinks,...candidate.platformLinks};editorMetadata.fieldSources.platforms=candidate._sourceId==='steam'||/^Steam$/i.test(candidate.metadataSource||'')?'Steam':before.fieldSources?.platforms||'';}
+  else if(type==='game'){
+    const candidatePlatforms=PlatformModel.detect(candidate);
+    editorMetadata.platforms=[...new Set([...(before.platforms||[]),...candidatePlatforms])];
+    editorMetadata.platformsExplicit=Boolean(before.platformsExplicit||candidate.platformsExplicit);
+    editorMetadata.platformsManual=false;editorMetadata.platformLinks={...before.platformLinks,...candidate.platformLinks};
+    if(candidatePlatforms.length)editorMetadata.fieldSources.platforms=candidate._sourceId==='steam'||/^Steam$/i.test(candidate.metadataSource||'')?'Steam':before.fieldSources?.platforms||'';
+  }
+  editorMetadata.playedPlatforms=PlatformModel.normalizeMany(before.playedPlatforms);
   if(scoreChanged||!(candidate.externalRating||candidate.steamRating))for(const key of ['ratingSource','ratingValue','ratingMax','ratingEdited'])editorMetadata[key]=before[key];
   for(const [id,key]of Object.entries(fields))if(changed(id)||candidate[key]===undefined||candidate[key]===null||candidate[key]==='')editorMetadata.fieldSources[key]=before.fieldSources?.[key]||'';
   if(!coverChanged)applyCoverCandidate(candidate);
@@ -521,7 +810,21 @@ async function saveEditor(event) { event.preventDefault(); const name = valueFor
 
 function clearFilters() { resourceFilters.clear();$('saveFilter').value='all';snapshotSelection.clear();snapshotAnchor=null;librarySelection.ids.clear();renderLibrary(); }
 async function refreshAllMetadata() { return refreshResources(filterItems().map(item=>item.id)); }
-async function selectSavePaths() { if ($('fieldType').value !== 'game') { showToast('存档备份仅适用于游戏条目', 'error'); return; } const paths = await native.pickSavePaths(); if (paths?.length) { editorSavePaths = Array.from(new Set(paths)); updateSavePathHint(); updateLinkButtons(); updateEditorSaveCue(true); showToast(`已选择 ${paths.length} 个存档位置`); } }
+async function selectSavePaths() { if ($('fieldType').value !== 'game') { showToast('存档备份仅适用于游戏条目', 'error'); return; } const paths = await native.pickSavePaths(); if (paths?.length) { editorSavePaths = Array.from(new Set([...editorSavePaths,...paths])); updateSavePathHint(); updateLinkButtons(); updateEditorSaveCue(true); showToast(`已添加 ${paths.length} 个存档位置`); } }
+async function detectEditorSavePaths(){
+  if($('fieldType').value!=='game')return;
+  if(editorSavePaths.length){showToast('已有手动设置的存档位置，自动识别不会覆盖');return;}
+  const button=$('detectSavePathsBtn'),old=button.textContent;button.disabled=true;button.textContent='识别中…';
+  try{
+    const item={...(editorOriginalItem||{}),id:editorId||'',type:'game',steamAppId:valueFor('fieldSteamAppId'),name:valueFor('fieldName'),savePaths:[]};
+    const result=await native.detectSavePaths(item);
+    if(!result?.ok)throw Error(result?.message||'没有识别到存档位置');
+    if(result.status==='manual-preserved'){showToast('已有手动设置的存档位置，自动识别不会覆盖');return;}
+    editorSavePaths=Array.from(new Set(result.paths||[]));updateSavePathHint();updateLinkButtons();updateEditorSaveCue(true);
+    showToast('已识别 '+editorSavePaths.length+' 个存档位置'+(result.source?' · '+result.source:''));
+  }catch(error){showToast(error.message||'获取存档路径失败','error');}
+  finally{button.disabled=false;button.textContent=old;}
+}
 async function backupCurrentSaves() {
   if (!editorId) { showToast('请先保存条目，再备份存档', 'error'); return; }
   if (!editorSavePaths.length) { showToast('请先选择存档文件或文件夹', 'error'); return; }
@@ -533,6 +836,7 @@ async function backupCurrentSaves() {
   if(!settings.webdavUrl){showToast(`存档已压缩备份（${result.files||0} 个文件 · ${formatBytes(result.size)}）`);return;}
   if(!result.snapshotId){showToast('本地存档已保存，但无法定位快照；请在条目中重试同步','error');return;}
   let syncResult;
+  setSnapshotUploadProgress(itemId,result.snapshotId,true);
   try{syncResult=await native.syncBackupSnapshot(itemId,result.snapshotId,settings,'immediate-backup');}
   catch(error){syncResult={ok:false,message:error?.message||String(error)};}
   await refreshSnapshotIndex(true);await renderBackupList();if(snapshotCardMode())renderLibrary();
@@ -738,8 +1042,8 @@ function disguiseItem(item, index) {
 }
 function applyDisguise(disguise) {
   const enabled = Boolean(disguise?.enabled);
-  const profile = disguise?.profile || settings.disguiseProfile || 'course';
-  settings = { ...settings, disguiseEnabled: enabled, disguiseProfile: profile };
+  settings = { ...settings, disguiseEnabled: enabled };
+  const toggle = $('settingsDisguiseEnabled'); if (toggle) toggle.checked = enabled;
   if (enabled) {
     cancelMetadataLookup();hideSettingsToast();$('readerBackdrop')?.classList.add('hidden');closeMedia();if(localImportSession)closeLocalImport();
     if (!disguiseOriginalState) { disguiseOriginalState = JSON.parse(JSON.stringify(state)); disguisePreviousView = activeView; }
@@ -757,7 +1061,6 @@ function applyDisguise(disguise) {
     render();
     renderLibrary();
   }
-  if ($('disguiseStatus')) $('disguiseStatus').textContent = enabled ? '已启用封面与标签伪装，Ctrl + Shift + U 退出' : '';
 }
 
 async function deleteResourceRecords(ids,{selectedBackups=[]}={}){
@@ -785,29 +1088,34 @@ async function deleteSnapshotResourceSelection(){
 }
 async function deleteEditor() { if (!editorId) return;const id=editorId;if(!(await deleteResourceRecords([id])))return;closeEditor();render(); }
 async function addCategory() { const category = (await askPrompt('输入新分类名称：', '新分类') || '').trim(); if (!category) return; if (state.categories.includes(category)) { showToast('这个分类已经存在', 'error'); return; } state.categories.push(category); state = await native.saveLibrary(state); renderCategories(); showToast('分类已创建'); }
-async function openSaveLocation() {
-  const target=editorSavePaths[0];if(!target)return;
+async function openSaveLocation(target) {
+  if(!target)return;
   try { const result=await native.revealLocal(target);if(!result?.ok)throw Error(result?.message||'存档位置不可用'); }
   catch(error){showToast('打开存档位置失败：'+error.message,'error');}
 }
 function ensureSettingsColumns(){const layout=document.querySelector('.settings-layout');if(!layout||layout.querySelector('.settings-column'))return;const left=document.createElement('div'),right=document.createElement('div');left.className=right.className='settings-column';left.append($('settingsTheme').closest('.settings-card'),layout.querySelector('.webdav-card'));right.append($('settingsObsidian').closest('.settings-card'),layout.querySelector('.disguise-card'));layout.append(left,right);}
 function ensureDeletePreference() { if ($('settingsConfirmDelete')) return; const card = $('settingsTheme')?.closest('.settings-card'); if (!card) return; const label = document.createElement('label'); label.className = 'check-label delete-preference'; label.innerHTML = '<input id="settingsConfirmDelete" type="checkbox" checked> 删除资源或存档前显示确认提醒'; const animation=$('settingsAnimations')?.closest('label');const row=document.createElement('div');row.className='settings-toggle-row';if(animation){animation.before(row);row.append(animation,label);}else card.appendChild(label); }
-function installDisguiseButtonHandlers() {
-  const enter = $('enterDisguiseBtn'); const exit = $('exitDisguiseBtn'); if (!enter || !exit || enter.dataset.umBound) return;
-  const freshEnter = enter.cloneNode(true); const freshExit = exit.cloneNode(true); enter.replaceWith(freshEnter); exit.replaceWith(freshExit); freshEnter.dataset.umBound = 'true'; freshExit.dataset.umBound = 'true';
-  freshEnter.addEventListener('click', async () => { const result = await native.setDisguise(true, $('settingsDisguiseProfile').value); settings = { ...settings, disguiseEnabled: true, disguiseProfile: result?.profile || $('settingsDisguiseProfile').value }; applyDisguise({ enabled: true, profile: settings.disguiseProfile }); });
-  freshExit.addEventListener('click', async () => { const result = await native.setDisguise(false, $('settingsDisguiseProfile').value); settings = { ...settings, disguiseEnabled: false, disguiseProfile: result?.profile || settings.disguiseProfile || 'course' }; applyDisguise({ enabled: false, profile: settings.disguiseProfile }); });
+function installDisguiseSwitchHandler() {
+  const toggle = $('settingsDisguiseEnabled'); if (!toggle || toggle.dataset.umBound) return;
+  toggle.dataset.umBound = 'true';
+  toggle.addEventListener('change', async () => {
+    const enabled = toggle.checked;
+    toggle.disabled = true;
+    try { applyDisguise(await native.setDisguise(enabled)); }
+    catch { toggle.checked = Boolean(settings.disguiseEnabled); }
+    finally { toggle.disabled = false; }
+  });
 }
 function filterSelectOptions(input) { const target = $(input.dataset.target); if (!target) return; const query = input.value.trim().toLowerCase(); Array.from(target.options).forEach((option) => { option.hidden = Boolean(query && option.value !== 'all' && !option.textContent.toLowerCase().includes(query)); }); }
-function ensureFilterSearches() { const labels = { statusFilter: '搜索状态…', genreFilter: '搜索类型标签…', categoryFilter: '搜索分类…', yearFilter: '搜索年份…', ratingFilter: '搜索评分…' }; Object.entries(labels).forEach(([targetId, placeholder]) => { const target = $(targetId); if (!target || document.querySelector('[data-filter-search="' + targetId + '"]')) return; const input = document.createElement('input'); input.className = 'filter-search'; input.dataset.filterSearch = targetId; input.dataset.target = targetId; input.placeholder = placeholder; input.addEventListener('input', () => filterSelectOptions(input)); target.insertAdjacentElement('afterend', input); new MutationObserver(() => filterSelectOptions(input)).observe(target, { childList: true }); }); }
+function ensureFilterSearches() { const labels = { statusFilter: '搜索状态…', genreFilter: '搜索标签…', categoryFilter: '搜索分类…', yearFilter: '搜索年份…', ratingFilter: '搜索评分…' }; Object.entries(labels).forEach(([targetId, placeholder]) => { const target = $(targetId); if (!target || document.querySelector('[data-filter-search="' + targetId + '"]')) return; const input = document.createElement('input'); input.className = 'filter-search'; input.dataset.filterSearch = targetId; input.dataset.target = targetId; input.placeholder = placeholder; input.addEventListener('input', () => filterSelectOptions(input)); target.insertAdjacentElement('afterend', input); new MutationObserver(() => filterSelectOptions(input)).observe(target, { childList: true }); }); }
 function clearDragShift() { all('.resource-card').forEach((card) => card.classList.remove('shift-left', 'shift-right')); }
 function updateDragShift(target) { const dragged = document.querySelector('.resource-card.dragging'); if (!dragged || !target || dragged === target) return clearDragShift(); const cards = [...document.querySelectorAll('.resource-card')]; const from = cards.indexOf(dragged); const to = cards.indexOf(target); clearDragShift(); if (from < to) cards.slice(from + 1, to + 1).forEach((card) => card.classList.add('shift-left')); else cards.slice(to, from).forEach((card) => card.classList.add('shift-right')); }
 function bindEvents() {
   $('saveFilter').addEventListener('change',()=>{snapshotSelection.clear();snapshotAnchor=null;renderLibrary();});
   all('[data-view]').forEach((button) => button.addEventListener('click', () => { activeView = button.dataset.view; render(); })); $('addBtn').addEventListener('click', () => openEditor()); $('emptyAdd').addEventListener('click', () => openEditor()); $('searchInput').addEventListener('input', () => { if ($('searchInput').value && activeView === 'dashboard') activeView = 'all'; render(); }); $('filterToggle').addEventListener('click', () => $('filters').classList.toggle('hidden')); ['statusFilter', 'genreFilter', 'categoryFilter', 'yearFilter', 'ratingFilter'].forEach((id) => $(id).addEventListener('change', renderLibrary)); $('clearFilters').addEventListener('click', clearFilters); all('.view-switch-btn').forEach((button) => button.addEventListener('click', () => { setLibraryLayout(button.dataset.layout); }));
   $('fieldType').addEventListener('change', () => { setStatusOptions($('fieldType').value); updateTypeFields($('fieldType').value); renderBackupList(); }); $('fieldStatus').addEventListener('change', updateCompletedDateState); $('fieldStoreUrl').addEventListener('input', updateLinkButtons); $('fieldNoteUrl').addEventListener('input', updateLinkButtons); $('editorForm').addEventListener('submit', saveEditor); $('metadataBtn').addEventListener('click', fetchMetadata); $('deleteBtn').addEventListener('click', deleteEditor); $('editorClose').addEventListener('click', closeEditor); $('editorCancel').addEventListener('click', cancelEditorChanges); $('candidateClose').addEventListener('click', dismissCandidateResults); $('editorBackdrop').addEventListener('contextmenu', (event) => { if (event.target === $('editorBackdrop')) {event.preventDefault();closeEditor();} }); $('candidateBackdrop').addEventListener('contextmenu', (event) => { if (event.target === $('candidateBackdrop')) {event.preventDefault();dismissCandidateResults();} });
-  $('openStoreBtn').addEventListener('click', () => openResourceLink(valueFor('fieldStoreUrl'),editorId)); $('openNoteBtn').addEventListener('click', () => native.openExternal(valueFor('fieldNoteUrl'))); $('pickSavePathsBtn').addEventListener('click', selectSavePaths); $('backupSaveBtn').addEventListener('click', backupCurrentSaves); $('savePathOpenBtn').addEventListener('click', openSaveLocation); $('categorySearch').addEventListener('input', renderCategories); all('.tag-tab').forEach((button) => button.addEventListener('click', () => { tagKind = button.dataset.tagKind; all('.tag-tab').forEach((entry) => entry.classList.toggle('active', entry === button)); renderCategories(); })); $('annualYear').addEventListener('change', renderAnnualReview);
-  $('settingsAnimations').addEventListener('change', applyAppearance); $('settingsTheme').addEventListener('change', applyAppearance); $('settingsAccent').addEventListener('input', applyAppearance); $('testWebdavBtn').addEventListener('click', testWebdav); $('syncWebdavBtn').addEventListener('click', () => syncWebdav('bidirectional'));  $('enterDisguiseBtn').addEventListener('click', async () => { settings = await native.setDisguise(true, $('settingsDisguiseProfile').value); applyDisguise({ enabled: true, profile: settings.disguiseProfile, label: '伪装模式' }); }); $('exitDisguiseBtn').addEventListener('click', async () => { settings = await native.setDisguise(false, $('settingsDisguiseProfile').value); applyDisguise({ enabled: false }); }); $('disguiseExitTop').addEventListener('click', () => native.setDisguise(false, $('settingsDisguiseProfile').value));
+  $('openStoreBtn').addEventListener('click', () => openResourceLink(valueFor('fieldStoreUrl'),editorId)); $('openNoteBtn').addEventListener('click', () => native.openExternal(valueFor('fieldNoteUrl'))); $('detectSavePathsBtn').addEventListener('click',detectEditorSavePaths);$('pickSavePathsBtn').addEventListener('click', selectSavePaths); $('backupSaveBtn').addEventListener('click', backupCurrentSaves); $('savePathRows').addEventListener('click',event=>{const open=event.target.closest('[data-open-save-path]');if(open){const index=Number(open.dataset.openSavePath);if(Number.isInteger(index)&&index>=0&&index<editorSavePaths.length)void openSaveLocation(editorSavePaths[index]);return;}const button=event.target.closest('[data-clear-save-path]');if(!button)return;const index=Number(button.dataset.clearSavePath);if(!Number.isInteger(index)||index<0||index>=editorSavePaths.length)return;editorSavePaths.splice(index,1);updateSavePathHint();updateLinkButtons();updateEditorSaveCue(true);});  $('annualYear').addEventListener('change', renderAnnualReview);
+  $('settingsAnimations').addEventListener('change', applyAppearance); $('settingsTheme').addEventListener('change', applyAppearance); $('settingsAccent').addEventListener('input', applyAppearance); $('testWebdavBtn').addEventListener('click', testWebdav); $('syncWebdavBtn').addEventListener('click', () => syncWebdav('bidirectional')); $('disguiseExitTop').addEventListener('click', () => native.setDisguise(false));
 $('clearNetworkCacheBtn').addEventListener('click',async()=>{
   if(networkCacheBusy)return;networkCacheBusy=true;++networkCacheQuery;const button=$('clearNetworkCacheBtn');button.disabled=true;button.textContent='清除中…';
   try{const result=await native.clearNetworkCache();if(result.after)displayNetworkCacheSize(result.after);else $('networkCacheSize').textContent='大小查询失败';showToast(result.errors.length?'缓存未全部清除：'+result.errors.join('；'):'联网缓存已清除',result.errors.length?'error':'normal');}
@@ -820,6 +1128,6 @@ $('exportBtn').addEventListener('click', async () => { if (!(await askConfirm('�
 
 ensureDragMotion();
 native.onDisguiseState(applyDisguise);
-async function init() { try { state = await native.loadLibrary(); settings = await native.loadSettings(); if(settings.credentialsUnavailable)showToast('此电脑无法解密原凭据，请在设置中重新输入；不会回退明文。','error'); if (!state || !Array.isArray(state.items)) state = { items: [], categories: [] }; if (!Array.isArray(state.categories)) state.categories = []; state.items = state.items.map(item => ({ ...item, status: StatusModel.normalize(item.status, item.type) })); activeView = settings.appearance?.defaultView || 'dashboard'; bindEvents(); installLibrarySelection(); installLibraryTools(); installCardQuickEdit(); installCardLayout(); installLocalImport(); installEditorInteractions(); installCoverControls(); installEditorFields(); installEditorPolish(); installPlatformPicker(); installWindowState(); installMetadataSession(); installSettingsAutosave(); installDisguiseButtonHandlers(); render(); applyDisguise({ enabled: settings.disguiseEnabled, profile: settings.disguiseProfile }); void refreshSnapshotIndex(true); } catch (error) { showToast(`读取本地数据失败：${error.message}`, 'error'); } }
+async function init() { try { state = await native.loadLibrary(); settings = await native.loadSettings(); if(settings.credentialsUnavailable)showToast('此电脑无法解密原凭据，请在设置中重新输入；不会回退明文。','error'); if (!state || !Array.isArray(state.items)) state = { items: [], categories: [] }; if (!Array.isArray(state.categories)) state.categories = []; state.items = state.items.map(item => ({ ...item, status: StatusModel.normalize(item.status, item.type) })); activeView = settings.appearance?.defaultView || 'dashboard'; bindEvents(); installTagManagement(); installLibrarySelection(); installLibraryTools(); installCardQuickEdit(); installCardLayout(); installLocalImport(); installEditorInteractions(); installCoverControls(); installEditorFields(); installEditorPolish(); installPlatformPicker(); installWindowState(); installMetadataSession(); installSettingsAutosave(); installDisguiseSwitchHandler(); render(); applyDisguise({ enabled: settings.disguiseEnabled }); void refreshSnapshotIndex(true); } catch (error) { showToast(`读取本地数据失败：${error.message}`, 'error'); } }
 init();
-function loadSettingsForm() { ensureSettingsColumns();ensureDeletePreference(); const appearance = settings.appearance || {}; $('settingsObsidian').value = settings.obsidianRoot || ''; $('settingsSteamKey').value = settings.steamApiKey || ''; $('settingsSteamId').value = settings.steamId || ''; $('settingsGoogleBooksKey').value = settings.googleBooksApiKey || ''; $('settingsTheme').value = appearance.theme || 'ocean'; $('settingsAccent').value = appearance.accent || '#65d8b0'; $('settingsAnimations').checked = appearance.animations !== false; $('settingsDefaultView').value = appearance.defaultView || 'dashboard'; $('settingsWebdavUrl').value = settings.webdavUrl || ''; $('settingsWebdavUsername').value = settings.webdavUsername || ''; $('settingsWebdavPassword').value = settings.webdavPassword || ''; $('settingsWebdavPath').value = settings.webdavRemotePath || 'YueDen'; $('settingsDisguiseProfile').value = settings.disguiseProfile || 'course'; $('settingsDisguiseVideoUrl').value = settings.disguiseVideoUrl || ''; $('settingsConfirmDelete').checked = settings.confirmBeforeDelete !== false; applyAppearance(); }
+function loadSettingsForm() { ensureSettingsColumns();ensureDeletePreference(); const appearance = settings.appearance || {}; $('settingsObsidian').value = settings.obsidianRoot || ''; $('settingsSteamKey').value = settings.steamApiKey || ''; $('settingsSteamId').value = settings.steamId || ''; $('settingsGoogleBooksKey').value = settings.googleBooksApiKey || ''; $('settingsTheme').value = appearance.theme || 'ocean'; $('settingsAccent').value = appearance.accent || '#65d8b0'; $('settingsAnimations').checked = appearance.animations !== false; $('settingsDefaultView').value = appearance.defaultView || 'dashboard'; $('settingsWebdavUrl').value = settings.webdavUrl || ''; $('settingsWebdavUsername').value = settings.webdavUsername || ''; $('settingsWebdavPassword').value = settings.webdavPassword || ''; $('settingsWebdavPath').value = settings.webdavRemotePath || 'YueDen'; $('settingsDisguiseVideoUrl').value = settings.disguiseVideoUrl || ''; $('settingsDisguiseEnabled').checked = Boolean(settings.disguiseEnabled); $('settingsPositiveEnergy').checked = Boolean(settings.positiveEnergyEnabled); $('settingsConfirmDelete').checked = settings.confirmBeforeDelete !== false; applyAppearance(); }

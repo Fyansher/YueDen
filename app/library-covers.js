@@ -2,11 +2,13 @@
 const libraryCoverMemory=new Map(),libraryCoverRequests=new Map();
 const transientCoverOwners=new WeakMap();let nextTransientCoverOwner=0;
 function coverUrls(item,orientation='landscape'){
- const preferred=orientation==='portrait'?'coverPortrait':'coverLandscape';
+ const preferred=orientation==='portrait'?'coverPortrait':'coverLandscape',opposite=orientation==='portrait'?'coverLandscape':'coverPortrait';
  const actual=typeof CoverClassifier!=='undefined'?CoverClassifier.orientation(item):item.coverOrientation||'';
  const shared=item.coverShared===true,commonAllowed=shared||!actual||actual==='square'||actual===orientation;
- const legacyFallback=!shared&&!actual;
- return [...new Set([item[preferred],commonAllowed?item.cover:'',item.networkCovers?.[preferred],commonAllowed?item.networkCovers?.cover:'',...(legacyFallback?[item.coverPortrait,item.coverLandscape,item.networkCovers?.coverPortrait,item.networkCovers?.coverLandscape]:[])].filter(Boolean))];
+ // Keep the requested direction first, then try every stored alternative.
+ // A wrong-shaped cover is still better than a generated name card when its
+ // preferred image is missing or returns 404.
+ return [...new Set([item[preferred],item.networkCovers?.[preferred],commonAllowed?item.cover:'',commonAllowed?item.networkCovers?.cover:'',item[opposite],item.networkCovers?.[opposite],item.cover,item.networkCovers?.cover].filter(Boolean))];
 }
 function coverOwner(item,image){
  const id=String(item?.id||'').trim();if(id)return 'resource:'+id;
@@ -27,8 +29,9 @@ function coverOrientation(image,item){
 function attachStableCover(image,item,index=0){
  image._coverCleanup?.();
  const orientation=coverOrientation(image,item),urls=coverUrls(item,orientation),signature=coverSignature(item,orientation,urls,image),tried=new Set([image.getAttribute('src')]);let alive=true,attempt=0,recovery=null;
- const remember=src=>{if(!signature||image.dataset.coverFallback==='true')return;libraryCoverMemory.set(signature,src);while(libraryCoverMemory.size>1800)libraryCoverMemory.delete(libraryCoverMemory.keys().next().value);};
- const valid=()=>alive&&image.isConnected;
+ image.dataset.coverSignature=signature;
+ const remember=src=>{if(!valid()||!signature||image.dataset.coverFallback==='true')return;libraryCoverMemory.set(signature,src);while(libraryCoverMemory.size>1800)libraryCoverMemory.delete(libraryCoverMemory.keys().next().value);};
+ const valid=()=>alive&&image.isConnected&&image.dataset.coverSignature===signature;
  const recover=()=>{
   if(recovery)return recovery;
   if(!signature||!urls.length||!native.resolveLibraryCover)return Promise.resolve('');
@@ -39,13 +42,11 @@ function attachStableCover(image,item,index=0){
   recovery=libraryCoverRequests.get(signature);return recovery;
  };
  const loaded=()=>{
-  if(!image.naturalWidth||image.dataset.coverFallback==='true')return;
+  if(!valid()||!image.naturalWidth||image.dataset.coverFallback==='true')return;
   ++attempt;image.classList.remove('cover-recovering');const src=image.getAttribute('src');remember(src);
-  // Download/cache in the background without touching an already decoded visible image.
-  if(/^https:\/\//i.test(src||''))void recover().then(ref=>{if(ref)remember(ref);});
  };
  const failed=async()=>{
-  if(!alive||image.dataset.coverFallback==='true')return;
+  if(!valid()||image.dataset.coverFallback==='true')return;
   const token=++attempt;image.classList.add('cover-recovering');
   const cached=signature&&libraryCoverMemory.get(signature),alternate=[cached,...urls].find(url=>url&&!tried.has(url));
   if(alternate){tried.add(alternate);image.src=alternate;void recover();return;}

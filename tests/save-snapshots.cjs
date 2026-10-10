@@ -34,6 +34,7 @@ test('compressed snapshots have readable names, preserve notes and deduplicate c
   assert.equal(files(path.join(root, 'objects')).length, 1);
   const manifest=JSON.parse(fs.readFileSync(path.join(listed[0].folder,'manifest.json'),'utf8')),object=manifest.entries[0].files[0],objectBytes=fs.readFileSync(path.join(root,object.object));
   assert.equal(await snapshots.verifyObjectBytes(object,objectBytes),true);
+  assert.equal(await snapshots.verifyObjectFile(object,path.join(root,object.object)),true,'a downloaded file can be verified without buffering its entire compressed payload');
   assert.equal(await snapshots.verifyObjectBytes(object,Buffer.from('corrupt object')),false);
   const currentManifest=JSON.parse(fs.readFileSync(path.join(listed[0].folder,'manifest.json'),'utf8'));manifest.updatedAt='2030-01-01T00:00:00.000Z';manifest.entries[0].source='X:/other-device/save';
   assert.equal(snapshots.manifestHash(manifest),listed[0].manifestHash,'timestamps and device-specific restore paths do not alter snapshot content identity');

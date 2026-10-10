@@ -50,7 +50,7 @@ function createStorefrontAdapters({json,text,parallel,detail,relevance}){
   const entries=new Map();let successes=0,failures=0;
   const regions=[['hk','zh','zh-hans-hk','香港'],['us','en','en-us','美国'],['jp','ja','ja-jp','日本'],['gb','en','en-gb','英国']];
   const publish=(batch,rank)=>{for(const item of batch){const previous=entries.get(item.id);const links={...previous?.regionalLinks,[regions[rank][0].toUpperCase()]:item.storeUrl};if(!previous||rank<previous._regionRank)entries.set(item.id,{...item,regionalLinks:links,_regionRank:rank});else previous.regionalLinks=links;}emit([...entries.values()].map(({_regionRank,...v})=>v));};
-  const enough=()=>{const scores=[...entries.values()].map(entry=>relevance(entry,terms));return scores.some(value=>value>=150)||scores.filter(value=>value>=80).length>=3;};
+  const enough=()=>[...entries.values()].some(entry=>relevance(entry,terms)>=80);
   for(let rank=0;rank<regions.length&&!enough();rank++){
    const [country,language,locale,label]=regions[rank];try{
     Runtime.check();const variables={countryCode:country,languageCode:language,pageSize:24,pageOffset:0,searchTerm:query,nextCursor:''};

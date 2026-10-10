@@ -6,7 +6,7 @@
 #batchSummary { display:flex; gap:6px; align-items:center; margin:0; padding:0; flex-wrap:nowrap; }
 #batchSummary #batchCount { font-size:11px; white-space:nowrap; }
 #batchSummary #batchSelectAll { white-space:nowrap; font-size:11px; }
-#batchSummary.drag-only #batchCount,#batchSummary.drag-only #batchSelectAll,#batchSummary.drag-only #batchRefresh,#batchSummary.drag-only #batchMove { display:none; }
+#batchSummary.drag-only #batchCount,#batchSummary.drag-only #batchSelectAll,#batchSummary.drag-only #batchRefresh,#batchSummary.drag-only #batchEdit { display:none; }
 .toolbar-actions { flex-wrap:wrap; gap:7px; }
 .local-import-row[data-phase=error],.local-import-row[data-phase=partial] { border:1px solid var(--danger)!important; background:color-mix(in srgb,var(--danger) 6%,var(--panel))!important; }
 .local-import-row[data-phase=error] .local-row-meta,.local-import-row[data-phase=partial] .local-row-meta { color:var(--danger); }

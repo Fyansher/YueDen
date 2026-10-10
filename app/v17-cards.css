@@ -36,6 +36,10 @@
 .card-quick-editor .quick-options { display:flex; flex-wrap:wrap; gap:5px; max-height:220px; overflow:auto; margin:6px 0 10px; }
 .card-quick-editor .quick-options button { width:auto; border:1px solid var(--line); border-radius:20px; min-height:28px; padding:3px 9px; }
 .card-quick-editor .quick-options button[aria-pressed=true] { border-color:var(--accent); }
+.card-quick-editor[data-kind=platform] .platform-quick-option[data-platform-state=release] { border:1px solid color-mix(in srgb,var(--line) 40%,var(--text) 60%); background:var(--panel-2); }
+.card-quick-editor[data-kind=platform] .platform-quick-option[data-platform-state=played] { border:1px solid var(--accent); background:color-mix(in srgb,var(--accent) 13%,var(--panel)); }
+.card-quick-editor[data-kind=platform] .platform-quick-option[data-platform-state=release]:hover { border-color:color-mix(in srgb,var(--line) 25%,var(--text) 75%); background:color-mix(in srgb,var(--panel-2) 88%,var(--text) 12%); }
+.card-quick-editor[data-kind=platform] .platform-quick-option[data-platform-state=played]:hover { border-color:var(--accent); background:color-mix(in srgb,var(--accent) 18%,var(--panel)); }
 .card-quick-editor .quick-actions { display:flex; gap:8px; margin-top:10px; }
 .card-quick-editor .quick-actions button { justify-content:center; min-width:0; }
 .card-quick-editor .quick-actions [data-quick-save] { color:var(--accent); background:color-mix(in srgb,var(--accent) 12%,var(--panel)); }

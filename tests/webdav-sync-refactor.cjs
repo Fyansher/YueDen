@@ -106,7 +106,7 @@ test('save catalog has deterministic content, detects edits and only skips again
   const edited = Catalog.create([{ id: 'one', manifestHash: 'new' }, { id: 'two', manifestHash: 'b' }], []);
   assert.notEqual(edited.revision, a.revision);
   assert.equal(Catalog.canSkip({ localRevision: a.revision, cached: { localRevision: a.revision, remoteRevision: a.revision, etag: '"r1"', remoteLength: 42 }, remote: { exists: true, etag: '"r1"', contentLength: 42 } }), true);
-  assert.equal(Catalog.canSkip({ localRevision: edited.revision, cached: { localRevision: edited.revision, remoteRevision: a.revision, etag: '"r1"', remoteLength: 42 }, remote: { exists: true, etag: '"r1"', contentLength: 42 } }), false, 'a changed local catalog must not reuse an old remote validator');
+  assert.equal(Catalog.canSkip({ localRevision: a.revision, cached: { localRevision: a.revision, remoteRevision: edited.revision, etag: '"r1"', remoteLength: 42 }, remote: { exists: true, etag: '"r1"', contentLength: 42 } }), true, 'unchanged local snapshots can skip catalog reads when cloud-only snapshots are present');
   assert.equal(Catalog.canSkipByContent(a.revision, a), true);
   assert.equal(Catalog.canSkipByContent(edited.revision, a), false);
   assert.equal(Catalog.canSkip({ localRevision: edited.revision, cached: { localRevision: a.revision, etag: '"r1"', remoteLength: 42 }, remote: { exists: true, etag: '"r1"', contentLength: 42 } }), false);
@@ -114,6 +114,8 @@ test('save catalog has deterministic content, detects edits and only skips again
   assert.equal(Catalog.canSkip({ localRevision: a.revision, cached: { localRevision: a.revision, etag: '"r1"', remoteLength: 42 }, remote: { exists: true, etag: '"r1"', contentLength: null } }), false);
   const digest='a'.repeat(64),withObjects=Catalog.create([{id:'items/Game--1234567890/2026-10-01_10-00-00',manifestHash:'manifest',objects:[{object:`objects/aa/${digest}.bin`,sha256:digest,size:10,storedSize:10,encoding:'raw'}]}]);
   assert.equal(Catalog.parse(JSON.parse(JSON.stringify(withObjects))).entries[0].objects.length,1);
+  const described=Catalog.create([{id:'remote',manifestHash:'r',metadata:{itemId:'game',gameName:'示例游戏',createdAt:'2026-10-01T00:00:00.000Z',files:4,size:123}}]);
+  assert.deepEqual(Catalog.parse(JSON.parse(JSON.stringify(described))).entries[0].metadata,described.entries[0].metadata);
   assert.throws(()=>Catalog.parse({...a,schemaVersion:1}),/云端存档索引格式无效/);
 });
 
