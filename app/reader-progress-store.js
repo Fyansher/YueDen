@@ -17,6 +17,18 @@ function createProgressStore(file,{io=fs.promises,wait=ms=>new Promise(r=>setTim
    return data[id];
   });tail=task.catch(()=>{});return task;
  }
- return {read,save,flush:()=>tail};
+ function replace(value){
+  if(!value||typeof value!=='object'||Array.isArray(value))return Promise.reject(Error('记录备份格式无效'));
+  const snapshot=structuredClone(value),json=JSON.stringify(snapshot);
+  if(json.length>8*1024*1024)return Promise.reject(Error('记录备份超过安全限制'));
+  for(const [id,row] of Object.entries(snapshot))if(typeof id!=='string'||!id||id.length>150||['__proto__','constructor','prototype'].includes(id)||!row||typeof row!=='object'||Array.isArray(row))return Promise.reject(Error('记录备份包含无效条目'));
+  const task=tail.then(async()=>{
+   const target=file(),temp=target+'.'+crypto.randomUUID()+'.tmp';await io.mkdir(path.dirname(target),{recursive:true});
+   const handle=await io.open(temp,'wx');try{await handle.writeFile(json,'utf8');await handle.sync();}finally{await handle.close();}
+   for(let attempt=0;;attempt++){try{await io.rename(temp,target);break;}catch(e){if(!['EPERM','EACCES','EBUSY'].includes(e.code)||attempt>=7){e.message+='；原记录保留，待恢复记录：'+temp;throw e;}await wait(Math.min(500,40*2**attempt));}}
+   return snapshot;
+  });tail=task.catch(()=>{});return task;
+ }
+ return {read,save,replace,flush:()=>tail};
 }
 module.exports={createProgressStore};

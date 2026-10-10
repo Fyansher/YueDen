@@ -4,7 +4,7 @@ function ensureDragMotion(){
  let dragged=null,group=[];const grid=()=>$('libraryGrid');
  const clear=()=>{all('.resource-card').forEach(c=>c.classList.remove('drag-over','dragging'));$('batchDelete')?.classList.remove('drag-delete-over');dragged=null;group=[];renderLibrarySelection();};
  document.addEventListener('dragstart',event=>{
-  const card=event.target.closest?.('.resource-card');if(!card||!grid()?.contains(card)||event.target.closest('.card-select'))return;
+  const card=event.target.closest?.('.resource-card');if(!card||!grid()?.contains(card)||event.target.closest('.card-select,.snapshot-row-select,.snapshot-group-select'))return;
   dragged=card;group=selectionDragIds(card);all('.resource-card').forEach(c=>c.classList.toggle('dragging',group.includes(c.dataset.id)));renderLibrarySelection();event.dataTransfer.effectAllowed='move';event.dataTransfer.setData('text/plain',card.dataset.id);
  },true);
  document.addEventListener('dragover',event=>{

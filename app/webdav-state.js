@@ -14,7 +14,7 @@ const LOCAL_ONLY_FIELDS = new Set([
   'deviceSettings', 'localDeviceId', 'deviceId', 'backupSecrets',
   'webdavUrl', 'webdavUsername', 'webdavPassword', 'webdavRemotePath',
   'credentialRefs', 'credentialsUnavailable', 'lastWebdavSyncAt', 'lastSyncAt',
-  'obsidianRoot', 'localScanPaths', 'refreshWhitelist', 'windowBounds',
+  'obsidianRoot', 'localScanPaths', 'localResourceRoots', 'refreshWhitelist', 'windowBounds',
   'playerWindowBounds', 'readerWindowBounds', 'uiState', 'windowState',
   'steamApiKey', 'googleBooksApiKey'
 ]);
@@ -129,6 +129,9 @@ function stripRemoteLocalData(value, depth = 0) {
 function normalizeIncoming(value) {
   if (!value || typeof value !== 'object') return value;
   const next = stripRemoteLocalData(value);
+  // Version 4 snapshots may still carry the unused organizer undo history.
+  // It remains part of legacy checksum validation, then is discarded on import.
+  delete next.organizationHistory;
   next.items = (value.items || []).map(item => stripRemoteLocalData(item));
   next.syncFormat = 'yueden-sync-state';
   next.syncVersion = SYNC_SCHEMA_VERSION;
@@ -141,6 +144,7 @@ function normalizeIncoming(value) {
 }
 function prepareLocalState(value, deviceId) {
   const next = clone(value || {});
+  delete next.organizationHistory;
   next.items = (value?.items || []).map(item => projectItem(item, deviceId));
   next.localDeviceId = deviceId;
   next.syncFormat = 'yueden-sync-state';
@@ -152,6 +156,7 @@ function prepareLocalState(value, deviceId) {
 }
 function toBaseState(value) {
   const result = pickFields(value, SYNC_FIELDS);
+  delete result.organizationHistory;
   return stripRemoteLocalData(result);
 }
 function compactCoverPayloads(value, depth = 0) {
@@ -164,9 +169,12 @@ function compactCoverPayloads(value, depth = 0) {
 }
 function compactLineage(value) {
   if (!value || value.schemaVersion !== 2 || !/^[a-f0-9]{64}$/i.test(value.endpointKey || '') || typeof value.baseRevision !== 'string' || !value.baseState || typeof value.baseState !== 'object') return null;
+  const legacyBase = compactCoverPayloads(pickFields(value.baseState, SYNC_FIELDS));
+  const legacyValid = syncRevision(legacyBase) === value.baseRevision;
   const baseState = compactCoverPayloads(toBaseState(value.baseState));
-  if (syncRevision(baseState) !== value.baseRevision) return null;
-  return { schemaVersion: 2, endpointKey: value.endpointKey, baseRevision: value.baseRevision, baseState };
+  const baseRevision = syncRevision(baseState);
+  if (!legacyValid && baseRevision !== value.baseRevision) return null;
+  return { schemaVersion: 2, endpointKey: value.endpointKey, baseRevision, baseState };
 }
 function toRemoteState(value) {
   assertNoInlineCovers(value);

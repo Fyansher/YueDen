@@ -8,12 +8,49 @@ function proofMatches(proof, info) {
     && String(proof.encoding || '') === String(info.encoding || ''));
 }
 
-async function uploadSnapshotFiles(files, transfer) {
+async function mapConcurrent(values, concurrency, work) {
+  const results = new Array(values.length);
+  let cursor = 0, failure = null;
+  const workerCount = Math.min(values.length, Math.max(1, Math.floor(concurrency) || 1));
+  const workers = Array.from({ length: workerCount }, async () => {
+    while (!failure) {
+      const index = cursor++;
+      if (index >= values.length) return;
+      try { results[index] = await work(values[index], index); }
+      catch (error) { failure ||= error; return; }
+    }
+  });
+  await Promise.all(workers);
+  if (failure) throw failure;
+  return results;
+}
+
+async function uploadSnapshotFiles(files, transfer, options = {}) {
   const objects = (files || []).filter(file => file?.immutable === true);
   const manifests = (files || []).filter(file => file?.immutable !== true);
   if (manifests.length !== 1) throw Error('存档快照必须恰好包含一个清单');
-  for (const file of objects) await transfer(file);
-  for (const file of manifests) await transfer(file);
+
+  const notify = (phase, state, rows, startedAt) => {
+    try {
+      options.onPhase?.({
+        phase, state, files: rows.length,
+        bytes: rows.reduce((sum, file) => sum + Math.max(0, Number(file?.info?.storedSize ?? file?.content?.length) || 0), 0),
+        durationMs: Date.now() - startedAt
+      });
+    } catch {}
+  };
+
+  const objectStartedAt = Date.now();
+  notify('objects', 'started', objects, objectStartedAt);
+  try { await mapConcurrent(objects, options.concurrency ?? 3, transfer); }
+  catch (error) { notify('objects', 'failed', objects, objectStartedAt); throw error; }
+  notify('objects', 'completed', objects, objectStartedAt);
+
+  const manifestStartedAt = Date.now();
+  notify('manifest', 'started', manifests, manifestStartedAt);
+  try { for (const file of manifests) await transfer(file); }
+  catch (error) { notify('manifest', 'failed', manifests, manifestStartedAt); throw error; }
+  notify('manifest', 'completed', manifests, manifestStartedAt);
 }
 
 async function uploadImmutableObject(options) {
@@ -40,6 +77,18 @@ async function uploadImmutableObject(options) {
     const etag = response.headers.get('etag') || '';
     const bytes = Buffer.from(await response.arrayBuffer());
     return await verifyObjectBytes(info, bytes) ? { sha256: info.sha256, etag: !etag.startsWith('W/') ? etag : '' } : false;
+  };
+  const confirmRemoteProof = async () => {
+    let lastError = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const proof = await readRemoteProof();
+        return proof || null;
+      } catch (error) { lastError = error; }
+      if (attempt < 2) await new Promise(resolve => setTimeout(resolve, 250 * (2 ** attempt)));
+    }
+    if (lastError) throw lastError;
+    return null;
   };
 
   const existing = await request('GET', target);
@@ -68,13 +117,13 @@ async function uploadImmutableObject(options) {
   let put;
   try { put = await request('PUT', target, localBytes, conditions); }
   catch (cause) {
-    const confirmed = await readRemoteProof().catch(() => false);
+    const confirmed = await confirmRemoteProof().catch(() => false);
     if (confirmed) { rememberRemoteObject(confirmed); return { uploaded: true, proof: confirmed, reason: 'confirmed-after-interruption' }; }
     throw Error('存档数据块上传中断，远端内容校验未确认：' + target, { cause });
   }
   if (put.status === 412) {
     await put.body?.cancel();
-    const confirmed = await readRemoteProof();
+    const confirmed = await confirmRemoteProof();
     if (confirmed) { rememberRemoteObject(confirmed); return { uploaded: false, proof: confirmed, reason: 'already-present-after-412' }; }
     throw Error('云端存档数据块在写入期间发生变化，校验后仍不一致，已停止覆盖');
   }
@@ -85,7 +134,7 @@ async function uploadImmutableObject(options) {
   }
   const responseEtag = put.headers.get('etag') || '';
   await put.body?.cancel();
-  const stored = await readRemoteProof();
+  const stored = await confirmRemoteProof();
   if (!stored) throw Error('存档数据块上传后回读校验失败，未继续写入清单：' + target);
   const proof = { ...stored, etag: stored.etag || (!responseEtag.startsWith('W/') ? responseEtag : '') };
   rememberRemoteObject(proof);

@@ -21,8 +21,8 @@ let metadataRequestId = 0;
 const resourceFilters = new ResourceFilters();
 const POSITIVE_ENERGY_TAGS = new Set(['NSFW', 'R18', 'R18+']);
 let backupRenderVersion = 0;
-let snapshotIndex = [], snapshotIndexGeneration = 0, snapshotSelection = new Set(), expandedSnapshotGroups = new Set(), snapshotAnchor = null, snapshotPaint = null, snapshotSuppressClickUntil = 0;
-const remoteSnapshotCache = new Map();
+let snapshotIndex = [], snapshotIndexGeneration = 0, remoteSnapshotIndexGeneration=0, remoteSnapshotIndexError='', remoteSnapshotIndexKey='', remoteSnapshotRowsCache=[], snapshotSelection = new Set(), expandedSnapshotGroups = new Set(), snapshotAnchor = null, snapshotPaint = null, snapshotSuppressClickUntil = 0;
+const remoteSnapshotCache = new Map(), remoteSnapshotListRequests = new Map(), remoteSnapshotListCache = new Map();
 let editorOriginalItem = null;
 const backupNoteTimers = new WeakMap(), backupNoteWrites = new WeakMap();
 
@@ -43,6 +43,12 @@ function typeOf(item) { return TYPE_NAMES[item.type] || '其他'; }
 function positiveEnergyTagKey(value) { return String(value ?? '').normalize('NFKC').trim().toUpperCase().replace(/[\s\-‐‑‒–—−]/g, ''); }
 function hasPositiveEnergyTag(item) { return [...(item?.genres || []), ...(item?.categories || [])].some(value => POSITIVE_ENERGY_TAGS.has(positiveEnergyTagKey(value))); }
 function visibleResourceItems() { const items = Array.isArray(state?.items) ? state.items : []; return settings?.positiveEnergyEnabled ? items.filter(item => !hasPositiveEnergyTag(item)) : items; }
+function renderNavigationCounts() {
+  const items = visibleResourceItems(), counts = new Map();
+  for (const item of items) counts.set(item.type, (counts.get(item.type) || 0) + 1);
+  const allCount = $('allResourceNavCount'); if (allCount) allCount.textContent = String(items.length);
+  all('[data-resource-nav-count]').forEach((node) => { node.textContent = String(counts.get(node.dataset.resourceNavCount) || 0); });
+}
 function statusList(type) { return STATUS_BY_TYPE[type] || STATUS_BY_TYPE.other; }
 function isCompleted(item) { return StatusModel.completed(item.status); }
 function isActive(item) { return ['进行中', '在看', '在读'].includes(item.status); }
@@ -123,9 +129,9 @@ function render() {
   if(activeView!=='settings')hideSettingsToast();
   $('localResourcesBtn')?.classList.toggle('hidden',!['game','movie','anime','manga','book'].includes(activeView)||settings.disguiseEnabled);
   $('librarySearchHeader').classList.toggle('hidden', !['all',...LocalModel.types].includes(activeView));
-  $('totalNavCount').textContent = visibleResourceItems().length; setActiveNav(activeView); applyAppearance();
+  renderNavigationCounts(); setActiveNav(activeView); applyAppearance();
   $('dashboardView').classList.toggle('hidden', activeView !== 'dashboard'); $('libraryView').classList.toggle('hidden', !['all',...LocalModel.types].includes(activeView)); $('categoriesView').classList.toggle('hidden', activeView !== 'categories'); $('settingsView').classList.toggle('hidden', activeView !== 'settings');
-  if (activeView === 'dashboard') renderDashboard(); if (['all',...LocalModel.types].includes(activeView)) renderLibrary(); if (activeView === 'categories') renderCategories(); if (activeView === 'settings') { loadSettingsForm(); void refreshNetworkCacheSize(); }renderSnapshotSelectionUi();
+  if (activeView === 'dashboard') renderDashboard(); if (['all',...LocalModel.types].includes(activeView)) renderLibrary(false); if (activeView === 'categories') renderCategories(); if (activeView === 'settings') { loadSettingsForm(); void refreshNetworkCacheSize(); }renderSnapshotSelectionUi();
 }
 
 function repairImage(image, index = 0) { if (image.dataset.fallback === '1') return; image.dataset.fallback = '1'; image.src = fallbackCover(image.alt, index); }
@@ -144,8 +150,10 @@ function renderDashboard() {
   $('statGrid').innerHTML = [['总条目', total, '全部媒体收藏', ''], ['进行中', active, '正在体验的内容', 'accent'], ['完成率', total ? `${Math.round(completed / total * 100)}%` : '—', `${completed} 条已完成`, 'warn'], ['今年新增', yearItems.filter((item) => String(item.createdAt || '').startsWith(currentYear)).length, `${currentYear} 年记录`, ''], ['累计时长', `${hours.toFixed(1)}h`, '游玩 / 阅读 / 观看记录', ''], ['最常见类型', topType ? topType[1] : '—', topType ? `${topType[2]} 条资源` : '添加资源后生成', ''], ['偏好标签', topGenre ? topGenre[0] : '—', topGenre ? `${topGenre[1]} 次出现` : '等待标签数据', 'accent'], ['最近整理', formatDate([...items].sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))[0]?.createdAt), '最后一次添加或更新', '']].map(([label, value, hint, cls]) => `<article class="stat-card ${cls}"><span class="stat-label">${label}</span><strong>${value}</strong><small>${hint}</small></article>`).join('');
   const statusCounts = {}; items.forEach((item) => { statusCounts[item.status] = (statusCounts[item.status] || 0) + 1; }); const statusEntries = Object.entries(statusCounts).sort((a, b) => b[1] - a[1]); const segments = total ? (() => { let cursor = 0; return statusEntries.map(([, count], index) => { const start = cursor; cursor += count / total * 360; return `${STATUS_COLORS[index % STATUS_COLORS.length]} ${start}deg ${cursor}deg`; }).join(', '); })() : '#223243 0deg 360deg';
   $('donut').style.background = `conic-gradient(${segments})`; $('donutTotal').textContent = total; $('statusLegend').innerHTML = statusEntries.length ? statusEntries.slice(0, 6).map(([status, count], index) => `<div class="legend-item"><span class="legend-dot" style="background:${STATUS_COLORS[index % STATUS_COLORS.length]}"></span><span>${esc(status)}</span><strong>${count}</strong></div>`).join('') : '<div class="legend-item"><span>添加资源后会显示状态分布</span></div>';
-  const recent = [...items].sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0)).slice(0, 5); $('recentList').innerHTML = recent.length ? recent.map((item) => `<div class="recent-item" data-open-id="${esc(item.id)}"><img class="recent-cover" src="${esc(item.cover || '')}" alt=""><div><div class="recent-name">${esc(item.name)}</div><div class="recent-status">${esc(typeOf(item))} · ${esc(item.status)}</div></div><span class="recent-date">${formatDate(item.createdAt)}</span></div>`).join('') : '<div class="empty-state" style="padding:35px 12px;border:0"><p>还没有添加资源，请前往资源页添加条目。</p></div>';
-  all('.recent-item[data-open-id]').forEach((node) => node.addEventListener('click', () => openEditor(node.dataset.openId))); all('.recent-cover').forEach((image, index) => image.addEventListener('error', () => repairImage(image, index)));
+  const recent = [...items].sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0)).slice(0, 5); $('recentList').innerHTML = recent.length ? recent.map((item, index) => `<div class="recent-item" data-open-id="${esc(item.id)}"><img class="recent-cover" data-cover-direction="portrait" src="${esc(coverFor(item, 'portrait') || fallbackCover(item.name, index))}" alt="" aria-hidden="true"><div><div class="recent-name">${esc(item.name)}</div><div class="recent-status">${esc(typeOf(item))} · ${esc(item.status)}</div></div><span class="recent-date">${formatDate(item.createdAt)}</span></div>`).join('') : '<div class="empty-state" style="padding:35px 12px;border:0"><p>还没有添加资源，请前往资源页添加条目。</p></div>';
+  all('.recent-item[data-open-id]').forEach((node) => node.addEventListener('click', () => openEditor(node.dataset.openId)));
+  const recentById = new Map(recent.map((item) => [String(item.id), item]));
+  all('.recent-cover').forEach((image, index) => { const item = recentById.get(image.closest('.recent-item')?.dataset.openId); if (item) attachStableCover(image, item, index); });
   const maxType = Math.max(1, ...typeCounts.map(([, , count]) => count)); const topTags = Object.entries(genreCounts).sort((a, b) => b[1] - a[1]).slice(0, 8); const maxTag = Math.max(1, ...topTags.map(([, count]) => count)); const statusText = statusEntries.length ? statusEntries.slice(0, 4).map(([name, count]) => `${name} ${count}`).join(' · ') : '暂无状态记录';
   $('insights').innerHTML = `<div class="insight-section"><h3>收藏结构</h3>${(typeCounts.length ? typeCounts : [['', '暂无数据', 0]]).map(([, name, count]) => `<div class="bar-row"><span>${name}</span><div class="bar-track"><div class="bar-fill" style="width:${count / maxType * 100}%"></div></div><strong>${count}</strong></div>`).join('')}</div><div class="insight-section"><h3>主题偏好</h3>${(topTags.length ? topTags : [['暂无标签', 0]]).map(([name, count]) => `<div class="bar-row"><span>${esc(name)}</span><div class="bar-track"><div class="bar-fill" style="width:${count / maxTag * 100}%"></div></div><strong>${count}</strong></div>`).join('')}</div><div class="insight-section insight-narrative"><h3>使用画像</h3><p>当前收藏以 <strong>${esc(topType ? topType[1] : '多种媒体')}</strong> 为主，状态分布为 <strong>${esc(statusText)}</strong>。</p><p>${topGenre ? `最常出现的主题是 <strong>${esc(topGenre[0])}</strong>，共覆盖 ${topGenre[1]} 条资源。` : '补充标签后，这里会生成更准确的偏好分析。'}</p></div>`;
   renderUsageChart();refreshUsage().then(()=>{if(activeView==='dashboard')renderUsageChart();});renderAnnualReview();
@@ -156,7 +164,11 @@ function renderAnnualReview() {
   const inYear = items.filter((item) => String(item.createdAt || '').startsWith(year) || String(item.completedDate || '').startsWith(year)); const added = inYear.filter((item) => String(item.createdAt || '').startsWith(year)); const completed = inYear.filter((item) => String(item.completedDate || '').startsWith(year) || (isCompleted(item) && String(item.updatedAt || '').startsWith(year))); const hours = inYear.reduce((sum, item) => sum + (Number(item.playtime) || 0), 0); const typeCounts = {}; const genreCounts = {}; inYear.forEach((item) => { typeCounts[item.type] = (typeCounts[item.type] || 0) + 1; (item.genres || []).forEach((genre) => { genreCounts[genre] = (genreCounts[genre] || 0) + 1; }); }); const topType = Object.entries(typeCounts).sort((a, b) => b[1] - a[1])[0]; const topGenre = Object.entries(genreCounts).sort((a, b) => b[1] - a[1])[0]; const monthDone = Array.from({ length: 12 }, (_, index) => { const month = String(index + 1).padStart(2, '0'); return { label: `${index + 1}月`, value: inYear.filter((item) => String(item.completedDate || '').slice(5, 7) === month).length + inYear.filter((item) => !item.completedDate && String(item.createdAt || '').slice(5, 7) === month).length }; }); const max = Math.max(1, ...monthDone.map((entry) => entry.value)); const top = [...inYear].filter((item) => Number(item.rating) > 0).sort((a, b) => Number(b.rating) - Number(a.rating)).slice(0, 3);
   $('annualSummary').innerHTML = [['新增条目', added.length], ['完成 / 看完', completed.length], ['投入时长', `${hours.toFixed(1)} 小时`], ['年度主轴', topType ? `${TYPE_LABELS[topType[0]] || topType[0]}` : '—']].map(([label, value]) => `<div class="annual-metric"><span>${label}</span><strong>${value}</strong></div>`).join('');
   const narrative = inYear.length ? `${year} 年你新增了 ${added.length} 条资源，完成或看完 ${completed.length} 条，累计记录 ${hours.toFixed(1)} 小时。内容主要集中在 <strong>${esc(topType ? (TYPE_LABELS[topType[0]] || topType[0]) : '多种媒体')}</strong>${topGenre ? `，最常出现的主题是 <strong>${esc(topGenre[0])}</strong>` : ''}。` : `${year} 年还没有足够的记录，添加资源并记录状态后会自动生成年度报告。`;
-  $('annualTimeline').innerHTML = `<div class="annual-chart">${monthDone.map((entry) => `<div class="month-bar"><div class="month-value" style="height:${entry.value / max * 100}%"><span>${entry.value || ''}</span></div><small>${entry.label}</small></div>`).join('')}</div><div class="annual-highlights"><h3>年度高光</h3>${top.length ? top.map((item) => `<button class="annual-item" data-open-id="${esc(item.id)}"><span>${stars(item.rating)}</span><strong>${esc(item.name)}</strong><small>${esc(typeOf(item))}</small></button>`).join('') : '<p>给年度收藏补充评分，就能看到年度高光。</p>'}<p class="annual-analysis">${narrative}</p></div>`; all('.annual-item[data-open-id]').forEach((node) => node.addEventListener('click', () => openEditor(node.dataset.openId)));
+  const highlights = top.map((item, index) => `<button class="annual-item" data-open-id="${esc(item.id)}"><img class="annual-cover" data-cover-direction="portrait" src="${esc(coverFor(item, 'portrait') || fallbackCover(item.name, index))}" alt="" aria-hidden="true"><span class="annual-item-info"><span class="annual-item-rating">${stars(item.rating)}</span><strong>${esc(item.name)}</strong><small>${esc(typeOf(item))}</small></span></button>`).join('');
+  $('annualTimeline').innerHTML = `<div class="annual-chart">${monthDone.map((entry) => `<div class="month-bar"><div class="month-value" style="height:${entry.value / max * 100}%"><span>${entry.value || ''}</span></div><small>${entry.label}</small></div>`).join('')}</div><div class="annual-highlights"><h3>年度高光</h3>${top.length ? highlights : '<p>给年度收藏补充评分，就能看到年度高光。</p>'}<p class="annual-analysis">${narrative}</p></div>`;
+  const highlightedItems = new Map(top.map((item) => [String(item.id), item]));
+  all('.annual-cover').forEach((image, index) => { const item = highlightedItems.get(image.closest('.annual-item')?.dataset.openId); if (item) attachStableCover(image, item, index); });
+  all('.annual-item[data-open-id]').forEach((node) => node.addEventListener('click', () => openEditor(node.dataset.openId)));
 }
 function selectedFilterValues(id) { return resourceFilters.selected(id); }
 function filterItems() {
@@ -164,14 +176,15 @@ function filterItems() {
   return librarySorting.apply(visibleResourceItems().filter(item => {
     if (activeView !== 'all' && item.type !== activeView) return false;if(window.audioBrowser&&!audioBrowser.matches(item))return false;
     const saveFilter=activeView==='game'?($('saveFilter')?.value||'all'):'all';
-    if(!resourceFilters.saveFilterMatches(saveFilter,snapshotsFor(item.id).length))return false;
+    if(saveFilter==='unlinked'){if(currentLibraryLayout()!=='list'||!unlinkedSnapshotsFor(item.id).length)return false;}
+    else if(!resourceFilters.saveFilterMatches(saveFilter,snapshotsFor(item.id).length))return false;
     const text = [item.name, item.developer, item.publisher, item.review, item.description, ...(item.audio?.artists||[]), ...(item.audio?.albumArtists||[]), item.audio?.circle, ...(item.audio?.creators||[]), ...(item.audio?.performers||[]), ...(item.audio?.tracks||[]).flatMap(t=>[t.title,...t.artists||[]]), ...(item.genres || []), ...(item.categories || [])].join(' ').toLowerCase();
     return (!query || text.includes(query)) && resourceFilters.matches(item);
   }));
 }
 function populateFilters() {
   const pageItems=visibleResourceItems().filter(item=>activeView==='all'||item.type===activeView);
-  resourceFilters.render(pageItems, renderLibrary);
+  resourceFilters.render(pageItems, renderLibrary,unlinkedSnapshotRows().length);
 }
 function snapshotSyncStatusHtml(entry,itemId=entry.itemId){
   if(entry.remoteOnly)return '<span class="snapshot-sync-button remote-only">仅云端</span>';
@@ -179,19 +192,28 @@ function snapshotSyncStatusHtml(entry,itemId=entry.itemId){
   if(entry.syncStatus==='未配置云同步')return '<span class="snapshot-sync-button unconfigured">未配置</span>';
   return '<button type="button" class="snapshot-sync-button" data-snapshot-upload data-item-id="'+esc(itemId)+'" data-backup-id="'+esc(entry.id)+'">待同步</button>';
 }
+function unlinkedSnapshotRows(){const ids=new Set(state.items.filter(item=>item.type==='game').map(item=>String(item.id)));return snapshotIndex.filter(entry=>!ids.has(String(entry.itemId||'')));}
+function unlinkedSnapshotsFor(itemId){const item=state.items.find(row=>row.id===itemId&&row.type==='game');return item?unlinkedSnapshotRows().filter(entry=>SaveSnapshotAssociation.candidate(entry,item)).sort((a,b)=>Date.parse(b.createdAt||0)-Date.parse(a.createdAt||0)):[];}
+function unmatchedSnapshotRows(){const games=state.items.filter(item=>item.type==='game');return unlinkedSnapshotRows().filter(entry=>!games.some(item=>SaveSnapshotAssociation.candidate(entry,item))).sort((a,b)=>Date.parse(b.createdAt||0)-Date.parse(a.createdAt||0));}
 function cardHtml(item) {
   let html=buildLibraryCard(item);if(!snapshotCardMode())return html;
   const selecting=snapshotSelectionMode();
   const template=document.createElement('template');template.innerHTML=html.trim();const card=template.content.firstElementChild,content=document.createElement('div');content.className='resource-card-content';
   while(card.firstChild)content.append(card.firstChild);card.append(content);
-  const rows=snapshotsFor(item.id),expanded=expandedSnapshotGroups.has(item.id),shown=expanded?rows:rows.slice(0,3),inputId='snapshot-group-'+encodeURIComponent(item.id);
-  const list=shown.map(entry=>{
-    const checked=snapshotSelection.has(entry.id),rowSelect=selecting?'<label class="snapshot-row-select" aria-label="选择 '+esc(item.name)+' 的存档 '+esc(formatDateTime(entry.createdAt))+'"><input type="checkbox" data-snapshot-select="'+esc(entry.id)+'" data-item-id="'+esc(item.id)+'"><span class="snapshot-checkmark" aria-hidden="true"></span></label>':'';
-    return '<div class="card-save-snapshot-row'+(selecting?' has-select':'')+(checked?' selected':'')+'" data-snapshot-row="'+esc(entry.id)+'">'+rowSelect+'<div class="snapshot-row-copy"><span class="snapshot-row-date" title="'+esc(formatDateTime(entry.createdAt))+'">'+esc(formatDateTime(entry.createdAt))+'</span><span class="snapshot-row-note" title="'+esc(entry.note||'无备注')+'">'+esc(entry.note||'无备注')+'</span></div>'+snapshotSyncStatusHtml(entry)+'</div>';
-  }).join('');
-  const groupSelect=selecting?'<label class="snapshot-group-select" title="选择或取消此游戏的全部存档"><input id="'+esc(inputId)+'" type="checkbox" data-snapshot-group-select="'+esc(item.id)+'"><span class="snapshot-checkmark" aria-hidden="true"></span></label>':'';
-  const panel='<section class="card-save-snapshots" data-snapshot-group="'+esc(item.id)+'"><div class="snapshot-group-heading">'+groupSelect+'<strong>存档快照</strong><span class="snapshot-group-count">'+rows.length+' 份</span></div><div class="card-save-snapshot-list">'+list+'</div>'+(rows.length>3?'<button type="button" class="snapshot-expand" data-snapshot-expand="'+esc(item.id)+'">'+(expanded?'收起':'展开其余 '+(rows.length-3)+' 份')+'</button>':'')+'</section>';
+   const unlinked=$('saveFilter')?.value==='unlinked',rows=unlinked?unlinkedSnapshotsFor(item.id):snapshotsFor(item.id),expanded=expandedSnapshotGroups.has(item.id),shown=expanded?rows:rows.slice(0,3),inputId='snapshot-group-'+encodeURIComponent(item.id);
+  const list=shown.map(entry=>snapshotRowHtml(entry,item,selecting,unlinked)).join('');
+   const groupSelect=selecting?'<button id="'+esc(inputId)+'" type="button" class="snapshot-group-select" role="checkbox" aria-label="选择或取消此游戏的全部存档" aria-checked="false" data-snapshot-group-select="'+esc(item.id)+'" title="选择或取消此游戏的全部存档"><span class="snapshot-checkmark" aria-hidden="true"></span></button>':'';
+  const heading=unlinked?'未关联存档':'存档快照',panel='<section class="card-save-snapshots" data-snapshot-group="'+esc(item.id)+'"><div class="snapshot-group-heading">'+groupSelect+'<strong>'+heading+'</strong><span class="snapshot-group-count">'+rows.length+' 份</span></div><div class="card-save-snapshot-list">'+list+'</div>'+(rows.length>3?'<button type="button" class="snapshot-expand" data-snapshot-expand="'+esc(item.id)+'">'+(expanded?'收起':'展开其余 '+(rows.length-3)+' 份')+'</button>':'')+'</section>';
   card.insertAdjacentHTML('beforeend',panel);return card.outerHTML;
+}
+function snapshotRowHtml(entry,item,selecting,association=false){
+  const checked=snapshotSelection.has(entry.id),rowSelect=selecting?'<label class="snapshot-row-select" aria-label="选择 '+esc(item.name)+' 的存档 '+esc(formatDateTime(entry.createdAt))+'"><input type="checkbox" data-snapshot-select="'+esc(entry.id)+'" data-item-id="'+esc(entry.itemId||'')+'"><span class="snapshot-checkmark" aria-hidden="true"></span></label>':'',paths=(entry.paths||[]).filter(Boolean),pathText=paths.length?paths.join('；'):'备份路径未记录',associate=association?'<button type="button" class="snapshot-associate" data-snapshot-associate="'+esc(entry.id)+'" data-old-item-id="'+esc(entry.itemId||'')+'" data-new-item-id="'+esc(item.id)+'">关联到此资源</button>':'';
+  return '<div class="card-save-snapshot-row'+(selecting?' has-select':'')+(checked?' selected':'')+(association?' unlinked-snapshot-row':'')+'" data-snapshot-row="'+esc(entry.id)+'">'+rowSelect+'<div class="snapshot-row-copy"><span class="snapshot-row-date" title="'+esc(formatDateTime(entry.createdAt))+'">'+esc(formatDateTime(entry.createdAt))+'</span><span class="snapshot-row-note" title="'+esc(entry.note||'无备注')+'">'+esc(entry.note||'无备注')+'</span>'+(association?'<small class="snapshot-row-path" title="'+esc(pathText)+'">'+esc(pathText)+'</small>':'')+'</div>'+snapshotSyncStatusHtml(entry,entry.itemId||item.id)+associate+'</div>';
+}
+function unmatchedSnapshotsPanelHtml(rows,selecting){
+  if(!rows.length)return '';
+  const options=state.items.filter(item=>item.type==='game').sort((a,b)=>a.name.localeCompare(b.name,'zh')).map(item=>'<option value="'+esc(item.id)+'">'+esc(item.name)+'</option>').join('');
+  return '<section class="card-save-snapshots unlinked-snapshot-overview"><div class="snapshot-group-heading">'+(selecting?'<button type="button" class="snapshot-group-select snapshot-orphans-select" role="checkbox" aria-label="选择或取消全部未关联存档" aria-checked="false" data-snapshot-orphans-select title="选择或取消全部未关联存档"><span class="snapshot-checkmark" aria-hidden="true"></span></button>':'')+'<strong>未关联存档 · 暂无匹配资源</strong><span class="snapshot-group-count">'+rows.length+' 份</span></div><div class="card-save-snapshot-list">'+rows.map(entry=>'<div class="card-save-snapshot-row unlinked-snapshot-row'+(selecting?' has-select':'')+(snapshotSelection.has(entry.id)?' selected':'')+'" data-snapshot-row="'+esc(entry.id)+'">'+(selecting?'<label class="snapshot-row-select" aria-label="选择未关联存档 '+esc(formatDateTime(entry.createdAt))+'"><input type="checkbox" data-snapshot-select="'+esc(entry.id)+'" data-item-id="'+esc(entry.itemId||'')+'"><span class="snapshot-checkmark" aria-hidden="true"></span></label>':'')+'<div class="snapshot-row-copy"><span class="snapshot-row-date">'+esc(formatDateTime(entry.createdAt))+'</span><span class="snapshot-row-note">'+esc(entry.gameName||'未命名资源')+(entry.note?' · '+esc(entry.note):'')+'</span><small class="snapshot-row-path" title="'+esc((entry.paths||[]).join('；')||'备份路径未记录')+'">'+esc((entry.paths||[]).join('；')||'备份路径未记录')+'</small></div>'+snapshotSyncStatusHtml(entry)+'<div class="snapshot-manual-associate"><select data-snapshot-associate-target="'+esc(entry.id)+'"><option value="">选择资源</option>'+options+'</select><button type="button" data-snapshot-associate="'+esc(entry.id)+'" data-old-item-id="'+esc(entry.itemId||'')+'">关联</button></div></div>').join('')+'</div></section>';
 }
 function renderSnapshotSelectionUi(){
   const enabled=snapshotSelectionMode();
@@ -199,18 +221,19 @@ function renderSnapshotSelectionUi(){
   const visible=visibleSnapshotRows(),ids=new Set(visible.map(entry=>entry.id));snapshotSelection=new Set([...snapshotSelection].filter(id=>ids.has(id)));
   const selected=snapshotSelection.size;
   for(const input of all('[data-snapshot-select]',$('libraryGrid'))){const checked=snapshotSelection.has(input.dataset.snapshotSelect);input.checked=checked;input.closest('.card-save-snapshot-row')?.classList.toggle('selected',checked);}
-  for(const input of all('[data-snapshot-group-select]',$('libraryGrid'))){const rows=visible.filter(entry=>entry.itemId===input.dataset.snapshotGroupSelect),count=rows.filter(entry=>snapshotSelection.has(entry.id)).length;input.checked=rows.length>0&&count===rows.length;input.indeterminate=count>0&&count<rows.length;}
+  for(const control of all('[data-snapshot-group-select]',$('libraryGrid'))){const rows=$('saveFilter')?.value==='unlinked'?unlinkedSnapshotsFor(control.dataset.snapshotGroupSelect):visible.filter(entry=>entry.itemId===control.dataset.snapshotGroupSelect),count=rows.filter(entry=>snapshotSelection.has(entry.id)).length;control.setAttribute('aria-checked',rows.length&&count===rows.length?'true':count?'mixed':'false');control.disabled=rows.length===0;}
+  for(const control of all('[data-snapshot-orphans-select]',$('libraryGrid'))){const rows=unmatchedSnapshotRows(),count=rows.filter(entry=>snapshotSelection.has(entry.id)).length;control.setAttribute('aria-checked',rows.length&&count===rows.length?'true':count?'mixed':'false');control.disabled=rows.length===0;}
   return selected;
 }
 function installSnapshotCardControls(){
   const grid=$('libraryGrid');
   for(const input of all('[data-snapshot-select]',grid))input.onchange=()=>{input.checked?snapshotSelection.add(input.dataset.snapshotSelect):snapshotSelection.delete(input.dataset.snapshotSelect);snapshotAnchor=input.dataset.snapshotSelect;renderSnapshotSelectionUi();renderLibrarySelection();};
-  for(const input of all('[data-snapshot-group-select]',grid))input.onchange=()=>{
-    const rows=visibleSnapshotRows().filter(entry=>entry.itemId===input.dataset.snapshotGroupSelect),checked=rows.some(entry=>!snapshotSelection.has(entry.id));
-    rows.forEach(entry=>checked?snapshotSelection.add(entry.id):snapshotSelection.delete(entry.id));renderSnapshotSelectionUi();renderLibrarySelection();
-  };
+  for(const row of all('.card-save-snapshot-row[data-snapshot-row]',grid))row.addEventListener('click',event=>{if(!SaveSnapshotSelection.shouldSelectSnapshotFromRow(snapshotSelectionMode(),event.target))return;const input=row.querySelector('[data-snapshot-select]');if(!input)return;event.preventDefault();event.stopPropagation();input.click();});
+  for(const control of all('[data-snapshot-group-select]',grid))SaveSnapshotSelection.bindGroupControl(control,()=>{const rows=$('saveFilter')?.value==='unlinked'?unlinkedSnapshotsFor(control.dataset.snapshotGroupSelect):visibleSnapshotRows().filter(entry=>entry.itemId===control.dataset.snapshotGroupSelect);return rows.map(entry=>entry.id);},()=>snapshotSelection,result=>{snapshotSelection=new Set(result.snapshotIds);snapshotAnchor=null;renderSnapshotSelectionUi();renderLibrarySelection();});
+  for(const control of all('[data-snapshot-orphans-select]',grid))SaveSnapshotSelection.bindGroupControl(control,()=>unmatchedSnapshotRows().map(entry=>entry.id),()=>snapshotSelection,result=>{snapshotSelection=new Set(result.snapshotIds);snapshotAnchor=null;renderSnapshotSelectionUi();renderLibrarySelection();});
   for(const button of all('[data-snapshot-expand]',grid))button.onclick=event=>{event.preventDefault();event.stopPropagation();const id=button.dataset.snapshotExpand;expandedSnapshotGroups.has(id)?expandedSnapshotGroups.delete(id):expandedSnapshotGroups.add(id);renderLibrary();};
   for(const button of all('[data-snapshot-upload]',grid))button.onclick=event=>{event.preventDefault();event.stopPropagation();void syncSnapshotButton(button);};
+  for(const button of all('[data-snapshot-associate]',grid))button.onclick=event=>{event.preventDefault();event.stopPropagation();const target=button.dataset.newItemId||all('[data-snapshot-associate-target]',grid).find(input=>input.dataset.snapshotAssociateTarget===button.dataset.snapshotAssociate)?.value;if(!target){showToast('先选择要关联的游戏资源');return;}void associateSnapshotButton(button,target);};
 }
 function installSnapshotPainting(){
   const grid=$('libraryGrid');
@@ -230,7 +253,13 @@ function installSnapshotPainting(){
   const stop=event=>{if(!snapshotPaint||snapshotPaint.pointerId!==event.pointerId)return;snapshotPaint=null;snapshotSuppressClickUntil=Date.now()+450;grid.classList.remove('snapshot-selection-painting');if(grid.hasPointerCapture?.(event.pointerId))grid.releasePointerCapture(event.pointerId);};
   grid.addEventListener('pointerup',stop);grid.addEventListener('pointercancel',stop);grid.addEventListener('lostpointercapture',stop);
   grid.addEventListener('click',event=>{if(Date.now()<snapshotSuppressClickUntil&&event.target.closest('.snapshot-row-select')){event.preventDefault();event.stopImmediatePropagation();}},true);
-  document.addEventListener('dragstart',event=>{if(event.target.closest?.('.snapshot-row-select')){event.preventDefault();event.stopImmediatePropagation();}},true);
+  document.addEventListener('dragstart',event=>{if(event.target.closest?.('.snapshot-row-select,.snapshot-group-select')){event.preventDefault();event.stopImmediatePropagation();}},true);
+}
+async function associateSnapshotButton(button,newItemId){
+  const backupId=button.dataset.snapshotAssociate,oldItemId=button.dataset.oldItemId||'',target=state.items.find(item=>item.id===newItemId);if(!backupId||!target)return;
+  const label=button.textContent;button.disabled=true;button.textContent='关联中…';
+  try{const result=await native.associateSaveSnapshot(backupId,oldItemId,newItemId);if(!result?.ok)throw Error(result?.message||'关联失败');remoteSnapshotCache.clear();snapshotSelection.delete(backupId);await refreshSnapshotIndex(true);showToast(result.message||'已关联存档');}
+  catch(error){button.disabled=false;button.textContent=label;showToast('关联存档失败：'+error.message,'error');}
 }
 async function syncSnapshotButton(button){
   const itemId=button.dataset.itemId||button.closest('.backup-entry')?.querySelector('[data-item-id]')?.dataset.itemId,backupId=button.dataset.backupId;
@@ -272,8 +301,9 @@ function animateLibraryCard(card,keyframes,options) {
  animation.addEventListener('finish',release,{once:true});animation.addEventListener('cancel',release,{once:true});return animation;
 }
 
-function renderLibrary() {
+function renderLibrary(updateNavigation = true) {
  const grid=$('libraryGrid'),previousLayout=grid.dataset.motionLayout,previousView=grid.dataset.motionView,layout=currentLibraryLayout(),previousIds=[...grid.children].map(node=>node.dataset.id).join('|');
+  if (updateNavigation) renderNavigationCounts();
  const motionAllowed=settings.appearance?.animations!==false&&!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
  const layoutChanged=Boolean(previousLayout&&previousLayout!==layout&&previousView===activeView),items=filterItems(),nextIds=items.map(item=>item.id).join('|');
  const transitionNeeded=layoutChanged||previousView!==activeView||previousIds!==nextIds;
@@ -284,14 +314,24 @@ function renderLibrary() {
  $('librarySearchHeader').prepend($('libraryHeading'));const actions=$('filterToggle').closest('.toolbar-actions');$('librarySearchHeader').append(actions);populateFilters();librarySorting.render();$('resultCount').textContent=items.length;const audioRows=window.audioBrowser?.render(items);document.querySelector('.view-switch').classList.toggle('hidden',Boolean(audioRows));if(audioRows){decorateLocalCards();renderLibrarySelection();renderSnapshotSelectionUi();return;}grid.classList.remove('audio-browser-list');grid.classList.add('library-grid');
  all('.view-switch-btn').forEach(button=>{button.classList.toggle('active',button.dataset.layout===layout);button.setAttribute('aria-pressed',String(button.dataset.layout===layout));});
  for(const [name,value]of [['small','small'],['list','list'],['portrait','portrait']])grid.classList.toggle(name+'-layout',layout===value);
- grid.innerHTML=items.map(cardHtml).join('');observeLibraryCardVisibility(grid);const preservedCoverImages=reuseLibraryCoverStages(grid,previousCoverStages,items,layout);$('libraryEmpty').classList.toggle('hidden',items.length>0);installSnapshotCardControls();
+ const unlinkedMode=activeView==='game'&&$('saveFilter')?.value==='unlinked',unmatched=unlinkedMode&&layout==='list'?unmatchedSnapshotRows():[],layoutHint=unlinkedMode&&layout!=='list'?'<div class="unlinked-layout-hint"><strong>未关联存档在列表视图中显示</strong><span>切换到列表视图后，可查看路径、关联候选并清理快照。</span><button type="button" data-snapshot-layout-list>切换到列表</button></div>':'',cloudWarning=unlinkedMode&&remoteSnapshotIndexError&&settings.webdavUrl?'<div class="unlinked-layout-hint cloud-snapshot-warning"><strong>云端快照暂不可读取</strong><span>'+esc(remoteSnapshotIndexError)+'</span></div>':'';
+ grid.innerHTML=cloudWarning+layoutHint+unmatchedSnapshotsPanelHtml(unmatched,snapshotSelectionMode())+items.map(cardHtml).join('');observeLibraryCardVisibility(grid);const preservedCoverImages=reuseLibraryCoverStages(grid,previousCoverStages,items,layout);$('libraryEmpty').classList.toggle('hidden',items.length>0||unmatched.length>0||Boolean(layoutHint)||Boolean(cloudWarning));installSnapshotCardControls();
+ all('[data-snapshot-layout-list]',grid).forEach(button=>button.onclick=()=>setLibraryLayout('list'));
  all('.resource-card').forEach(card=>{
+   card.addEventListener('click',event=>{
+    if(event.target.closest?.('.snapshot-group-select'))return;
+    const missedGroupControl=all('.snapshot-group-select:not(:disabled)',card).find(control=>SaveSnapshotSelection.isWithinGroupControlHitArea(control,event.clientX,event.clientY));
+    if(!missedGroupControl)return;
+    event.preventDefault();event.stopImmediatePropagation();missedGroupControl.click();
+   },true);
   card.tabIndex=0;
   card.addEventListener('keydown',event=>{if(event.target===card&&['Enter',' '].includes(event.key)){event.preventDefault();card.click();}});
   card.addEventListener('click',async event=>{
-   if(event.target.closest('.card-save-snapshots'))return;
+    const inSnapshotPanel=event.target.closest('.card-save-snapshots');
+    if(inSnapshotPanel&&SaveSnapshotSelection.isSnapshotPanelControlTarget(event.target))return;
    const action=event.target.closest('[data-action]')?.dataset.action,item=state.items.find(entry=>entry.id===card.dataset.id);if(!item)return;
    if(librarySelection.active&&!action){toggleLibrarySelection(item.id,event);return;}
+    if(inSnapshotPanel)return;
    if(item.type==='audio'&&!action&&event.target.closest('.card-cover')&&!document.body.classList.contains('is-disguised')){window.audioPlayer?.playItem(item);return;}
    if(!action&&event.target.closest('.card-cover')&&!document.body.classList.contains('is-disguised')){openMedia(item.id);return;}
    try{
@@ -629,21 +669,40 @@ function updateCompletedDateState() { const field=$('fieldCompletedDate');field.
 function setRating(value) { setStarSlider(value); }
 function valueFor(id) { return $(id)?.value?.trim() || ''; } function splitValues(value) { return value.split(/[,，、]/).map((entry) => entry.trim()).filter(Boolean); }
 function formatBytes(value) { const bytes = Number(value) || 0; if (bytes < 1024) return bytes + ' B'; if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'; if (bytes < 1024 * 1024 * 1024) return (bytes / 1024 / 1024).toFixed(1) + ' MB'; return (bytes / 1024 / 1024 / 1024).toFixed(2) + ' GB'; }
-async function refreshSnapshotIndex(rerender=true,clearRemoteCache=true){if(clearRemoteCache)remoteSnapshotCache.clear();const version=++snapshotIndexGeneration;try{const rows=await native.listAllBackups();if(version===snapshotIndexGeneration)snapshotIndex=Array.isArray(rows)?rows:[];}catch(error){if(version===snapshotIndexGeneration){snapshotIndex=[];showToast('读取存档快照失败：'+error.message,'error');}}if(rerender&&activeView==='game')renderLibrary();return snapshotIndex;}
+async function requestRemoteSnapshotRows(){
+  if(!settings.webdavUrl)return [];
+  const key=JSON.stringify([settings.webdavUrl,settings.webdavUsername,settings.webdavRemotePath]),cached=remoteSnapshotListCache.get(key);
+  if(cached&&cached.expires>Date.now())return cached.rows;
+  let pending=remoteSnapshotListRequests.get(key);
+  if(!pending){
+    pending=native.listRemoteBackups('',settings).then(result=>{
+      if(!result?.ok)throw Error(result?.message||'读取云端存档目录失败');
+      const rows=Array.isArray(result.entries)?result.entries:[];remoteSnapshotListCache.set(key,{rows,expires:Date.now()+20000});return rows;
+    }).finally(()=>{if(remoteSnapshotListRequests.get(key)===pending)remoteSnapshotListRequests.delete(key);});
+    remoteSnapshotListRequests.set(key,pending);
+  }
+  return pending;
+}
+async function refreshRemoteSnapshotIndex(localVersion){
+  const generation=++remoteSnapshotIndexGeneration;if(!settings.webdavUrl)return;
+  try{const remote=await requestRemoteSnapshotRows();if(generation!==remoteSnapshotIndexGeneration||localVersion!==snapshotIndexGeneration)return;const byId=new Map(remote.map(entry=>[entry.id,entry])),local=snapshotIndex.filter(entry=>!entry.remoteOnly).map(entry=>{const cloud=byId.get(entry.id);return {...entry,remoteOnly:false,localAvailable:true,syncStatus:cloud?.manifestHash===entry.manifestHash?'已同步':'待同步',paths:entry.paths?.length?entry.paths:cloud?.paths||[],resourceIdentity:entry.resourceIdentity||cloud?.resourceIdentity||null};}),localIds=new Set(local.map(entry=>entry.id));
+    snapshotIndex=[...local,...remote.filter(entry=>!localIds.has(entry.id)).map(entry=>({...entry,remoteOnly:true,localAvailable:false,syncStatus:'云端（未下载）'}))];remoteSnapshotRowsCache=remote;remoteSnapshotIndexError='';
+  }catch(error){if(generation!==remoteSnapshotIndexGeneration||localVersion!==snapshotIndexGeneration)return;remoteSnapshotIndexError=error.message;if(remoteSnapshotRowsCache.length){const local=snapshotIndex.filter(entry=>!entry.remoteOnly),ids=new Set(local.map(entry=>entry.id));snapshotIndex=[...local,...remoteSnapshotRowsCache.filter(entry=>!ids.has(entry.id)).map(entry=>({...entry,remoteOnly:true,localAvailable:false,syncStatus:'云端（未下载）'}))];}}
+  if(activeView==='game')renderLibrary();
+}
+async function refreshSnapshotIndex(rerender=true,clearRemoteCache=true,refreshRemote=true){if(clearRemoteCache){remoteSnapshotCache.clear();remoteSnapshotListCache.clear();}const indexKey=JSON.stringify([settings.webdavUrl,settings.webdavUsername,settings.webdavRemotePath]);if(indexKey!==remoteSnapshotIndexKey){remoteSnapshotIndexKey=indexKey;remoteSnapshotRowsCache=[];remoteSnapshotIndexError='';}const version=++snapshotIndexGeneration;try{const rows=await native.listAllBackups();if(version===snapshotIndexGeneration)snapshotIndex=Array.isArray(rows)?rows:[];}catch(error){if(version===snapshotIndexGeneration){snapshotIndex=[];showToast('读取存档快照失败：'+error.message,'error');}}if(rerender&&activeView==='game')renderLibrary();if(refreshRemote&&settings.webdavUrl)void refreshRemoteSnapshotIndex(version);return snapshotIndex;}
 function snapshotsFor(itemId){return snapshotIndex.filter(entry=>entry.itemId===itemId).sort((a,b)=>Date.parse(b.createdAt||0)-Date.parse(a.createdAt||0));}
-function snapshotCardMode(){return activeView==='game'&&$('saveFilter')?.value==='has'&&currentLibraryLayout()==='list';}
+function snapshotCardMode(){return activeView==='game'&&['has','unlinked'].includes($('saveFilter')?.value)&&currentLibraryLayout()==='list';}
 function snapshotSelectionMode(){return snapshotCardMode()&&Boolean(librarySelection?.active)&&!$('filters')?.classList.contains('hidden')&&!document.body.classList.contains('is-disguised');}
-function visibleSnapshotRows(){const allowed=new Set(filterItems().map(item=>item.id));return snapshotIndex.filter(entry=>allowed.has(entry.itemId));}
+function visibleSnapshotRows(){if($('saveFilter')?.value==='unlinked'){const candidates=filterItems().flatMap(item=>unlinkedSnapshotsFor(item.id)),unmatched=unmatchedSnapshotRows();return [...new Map([...candidates,...unmatched].map(entry=>[entry.id,entry])).values()];}const allowed=new Set(filterItems().map(item=>item.id));return snapshotIndex.filter(entry=>allowed.has(entry.itemId));}
 function ensureBackupPanel() { return $('backupList'); }
 async function remoteBackupsFor(itemId){
   if(!settings.webdavUrl)return [];
   const key=[itemId,settings.webdavUrl,settings.webdavRemotePath,settings.webdavUsername].join('\n'),cached=remoteSnapshotCache.get(key);
   if(cached&&cached.expires>Date.now())return cached.rows;
-  const result=await native.listRemoteBackups(itemId,settings);
-  if(!result?.ok)throw Error(result?.message||'读取云端存档列表失败');
-  const rows=Array.isArray(result.entries)?result.entries:[];remoteSnapshotCache.set(key,{rows,expires:Date.now()+20000});return rows;
+  const rows=(await requestRemoteSnapshotRows()).filter(entry=>!itemId||String(entry.itemId||'')===String(itemId));remoteSnapshotCache.set(key,{rows,expires:Date.now()+20000});return rows;
 }
-async function renderBackupList() {
+async function renderBackupList(options={}) {
   ensureBackupPanel();
   const panel = $('backupList'), list = $('backupSnapshotRows'), itemId = editorId, version = ++backupRenderVersion;
   if (!panel || !list) return;
@@ -653,7 +712,7 @@ async function renderBackupList() {
   if (!itemId) { $('backupSnapshotCount').textContent = '0 份'; list.innerHTML = '<div class="backup-empty">暂无存档快照</div>'; return; }
   list.textContent = '正在读取存档快照…';
   let backups = await native.listBackups(itemId),remoteRows=[],remoteError='';
-  try{remoteRows=await remoteBackupsFor(itemId);}catch(error){remoteError=error.message;}
+  if(options.includeRemote!==false)try{remoteRows=await remoteBackupsFor(itemId);}catch(error){remoteError=error.message;}
   if (editorId !== itemId || version !== backupRenderVersion) return;
   const localIds=new Set(backups.map(entry=>entry.id));
   const cloudOnly=remoteRows.filter(entry=>!localIds.has(entry.id)).map(entry=>({...entry,remoteOnly:true}));
@@ -832,7 +891,7 @@ async function backupCurrentSaves() {
   if(!result?.ok){showToast(result?.message||'存档备份失败','error');return;}
   const item=state.items.find(entry=>entry.id===itemId);
   if(item){item.backupCount=(Number(item.backupCount)||0)+1;item.lastBackupAt=result.createdAt;state=await native.saveLibrary(state);}
-  await refreshSnapshotIndex(true);await renderBackupList();if(snapshotCardMode())renderLibrary();
+  await refreshSnapshotIndex(true,true,false);await renderBackupList({includeRemote:false});if(snapshotCardMode())renderLibrary();
   if(!settings.webdavUrl){showToast(`存档已压缩备份（${result.files||0} 个文件 · ${formatBytes(result.size)}）`);return;}
   if(!result.snapshotId){showToast('本地存档已保存，但无法定位快照；请在条目中重试同步','error');return;}
   let syncResult;
@@ -1066,8 +1125,8 @@ function applyDisguise(disguise) {
 async function deleteResourceRecords(ids,{selectedBackups=[]}={}){
   const wanted=new Set(ids||[]),resources=state.items.filter(item=>wanted.has(item.id));if(!resources.length)return false;
   try{
-    const backups=await native.listAllBackups();if(!Array.isArray(backups))throw Error('无法读取关联存档，未删除资源');snapshotIndex=backups;
-    const explicitIds=new Set((selectedBackups||[]).map(entry=>entry.id)),explicit=backups.filter(entry=>explicitIds.has(entry.id)),associated=backups.filter(entry=>wanted.has(entry.itemId)),additional=associated.filter(entry=>!explicitIds.has(entry.id)),decision=await confirmResourceDeletion(resources,additional.length,{selectedBackupCount:explicit.length});if(!decision)return false;
+    const backups=await native.listAllBackups();if(!Array.isArray(backups))throw Error('无法读取关联存档，未删除资源');
+    const plan=SaveSnapshotSelection.planDeletion({resourceIds:wanted,localSnapshots:backups,visibleSnapshots:snapshotIndex,selectedSnapshots:selectedBackups}),explicit=plan.explicit,additional=plan.additional,decision=await confirmResourceDeletion(resources,additional.length,{selectedBackupCount:explicit.length});if(!decision)return false;
     const removeSaves=new Map(explicit.map(entry=>[entry.id,entry]));if(decision.deleteSaves)for(const entry of additional)removeSaves.set(entry.id,entry);
     if(removeSaves.size){const removed=await native.deleteBackups([...removeSaves.values()].map(entry=>({itemId:entry.itemId,backupId:entry.id})),{syncCloud:decision.syncCloud});if(!removed?.ok)throw Error(removed?.message||'所选存档删除失败，资源条目已保留');}
     const deletedAt=new Date().toISOString(),existing=(state.deletedItems||[]).filter(row=>!wanted.has(row.id)),tombstones=resources.map(item=>({id:item.id,identityKey:item.identityKey||'',deletedAt}));
@@ -1123,7 +1182,7 @@ $('clearNetworkCacheBtn').addEventListener('click',async()=>{
   finally{networkCacheBusy=false;button.disabled=false;button.textContent='清除缓存';}
 });
 $('openLogsBtn').addEventListener('click',async()=>{try{const result=await native.openMetadataDiagnosticLogs();if(!result?.ok)showToast(result?.message||'无法打开日志文件夹','error');}catch(error){showToast(error?.message||'无法打开日志文件夹','error');}});
-$('exportBtn').addEventListener('click', async () => { if (!(await askConfirm('备份将包含资源资料和路径、设置以及远程音频库连接。WebDAV 和远程音频登录信息会以可恢复的明文写入所选 JSON 文件，请保存到可信位置。继续导出吗？', { title: '导出完整备份', confirmText: '继续导出' }))) return; if (!(await flushSettingsSave())) return; try { if (await native.exportData(state)) showToast('完整数据备份已导出'); } catch (error) { showToast('数据备份失败：' + error.message, 'error'); } }); $('importBtn').addEventListener('click', async () => { const imported = await native.importData(); if (!imported) return; const message = imported.includesSettings ? '将覆盖当前资源库、设置和远程音频库连接。备份中的登录凭据会重新加密保存在本机。继续导入吗？' : '将覆盖当前资源库；旧格式备份不会修改设置和远程音频连接。继续导入吗？'; if (!(await askConfirm(message, { title: '导入前确认', confirmText: '继续导入', danger: true }))) return; try { await native.restoreData(imported.token); state = await native.loadLibrary(); settings = await native.loadSettings(); render(); if (activeView === 'settings') loadSettingsForm(); showToast('数据已恢复'); } catch (error) { showToast('数据恢复失败：' + error.message, 'error'); } }); $('minimizeBtn').addEventListener('click', native.minimize);  $('closeBtn').addEventListener('click', async () => { if (await flushSettingsSave()) native.close(); });
+$('exportBtn').addEventListener('click', async () => { if (!(await askConfirm('备份将包含资源资料、封面、设置、本机使用时长记录和本地路径，以及远程音频库连接。WebDAV 和远程音频登录信息会以可恢复的明文写入所选 JSON 文件，请保存到可信位置。游戏存档快照文件仍单独管理，不会放入此 JSON。继续导出吗？', { title: '导出完整备份', confirmText: '继续导出' }))) return; if (!(await flushSettingsSave())) return; try { if (await native.exportData(state)) showToast('完整数据备份已导出'); } catch (error) { showToast('数据备份失败：' + error.message, 'error'); } }); $('importBtn').addEventListener('click', async () => { const imported = await native.importData(); if (!imported) return; const message = imported.includesSettings ? '将覆盖当前资源库、设置和远程音频库连接。备份中的登录凭据会重新加密保存在本机。继续导入吗？' : '将覆盖当前资源库；旧格式备份不会修改设置和远程音频连接。继续导入吗？'; if (!(await askConfirm(message, { title: '导入前确认', confirmText: '继续导入', danger: true }))) return; try { await native.restoreData(imported.token); state = await native.loadLibrary(); settings = await native.loadSettings(); render(); if (activeView === 'settings') loadSettingsForm(); showToast('数据已恢复'); } catch (error) { showToast('数据恢复失败：' + error.message, 'error'); } }); $('minimizeBtn').addEventListener('click', native.minimize);  $('closeBtn').addEventListener('click', async () => { if (await flushSettingsSave()) native.close(); });
 }
 
 ensureDragMotion();

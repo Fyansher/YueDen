@@ -32,6 +32,8 @@ test('local paths stay per device and incoming backups keep the current device p
   const imported = State.restoreDeviceSettings({ deviceSettings: { 'device-a': { obsidianRoot: 'D:/Notes' } }, obsidianRoot: 'D:/Notes' }, { obsidianRoot: 'E:/Notes', localScanPaths: ['E:/Games'] }, 'device-b');
   assert.equal(imported.obsidianRoot, 'E:/Notes');
   assert.deepEqual(imported.localScanPaths, ['E:/Games']);
+  assert.equal(State.LOCAL_ONLY_FIELDS.has('localResourceRoots'), true, 'media import directories stay local to each device during WebDAV sync');
+  assert.equal(State.canonicalize({ audio: ['D:/Music'] }, 'localResourceRoots'), undefined);
 });
 
 test('resource deletion without a common base is an unknown conflict instead of silently winning', () => {

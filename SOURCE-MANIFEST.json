@@ -14,7 +14,7 @@
     {
       "path": "app/library-drag.js",
       "includedInRelease": true,
-      "sha256": "B1505A5C42EF39BE0880872D0BB1D6FF27E1012AB93DAC5DDC7D9A5A4CA51653"
+      "sha256": "2C99376682C3F165427E96003C66A5863E7505C091FB6576701198F3EDEC4356"
     },
     {
       "path": "app/vendor/cmaps/ETen-B5-H.bcmap",
@@ -104,7 +104,7 @@
     {
       "path": "tests/usage-241.cjs",
       "includedInRelease": false,
-      "sha256": "54329262AF2203C60D87473D646225F880BE36AD6FF48D84578E83E07077A864"
+      "sha256": "9EC91CA932DD3C8E21A007AB8C6EF75CA06F24D0288B841DFBD2A4C287CC05C8"
     },
     {
       "path": "tests/native-folder-policy.cjs",
@@ -139,7 +139,7 @@
     {
       "path": "app/webdav-save-transfer.js",
       "includedInRelease": true,
-      "sha256": "4616061AC708E7830FDB02505D9542186762F4628339752DAFBA71101E3320A4"
+      "sha256": "E77B4999311AA2F589544F040FD60A629942A222B9A7C75BD0D9C24B08A9B75F"
     },
     {
       "path": "tests/scan-real-audit.cjs",
@@ -175,11 +175,6 @@
       "path": "app/player/tests/window-controls.test.cjs",
       "includedInRelease": true,
       "sha256": "6954ABBEEC0B5E46E7B3DF6B30389D525D6CDA7E62E2C6A19A3764F4E7EF9CB0"
-    },
-    {
-      "path": "app/resource-organizer.js",
-      "includedInRelease": true,
-      "sha256": "1CF8770700EC9ED2BD82056ABCB4B9033122D8B8A37247A84F48311D5D681FCC"
     },
     {
       "path": "tests/native-cn-ipc.cjs",
@@ -354,7 +349,7 @@
     {
       "path": "app/index.html",
       "includedInRelease": true,
-      "sha256": "A97983D4499FEA83C75B9C09830FBD58D69870287992B623A0376AADCE860A52"
+      "sha256": "3CE6480C761422048B4A50CE55D196D0DFC8CDF63FA10F015FBD41297D4BC2C5"
     },
     {
       "path": "app/native/ResourcePicker.exe",
@@ -364,7 +359,7 @@
     {
       "path": "tests/native-shared-interactions.cjs",
       "includedInRelease": false,
-      "sha256": "D41A671688DF47769D7EF57768EF11A6667635A4C245942D2CBEC532679AB3E7"
+      "sha256": "744182D77002F9E8FC6015202FC23D82E0CA4013ECE895DEB1C7B02C500B3373"
     },
     {
       "path": "tests/yueden-238-smoke.cjs",
@@ -379,7 +374,7 @@
     {
       "path": "app/save-snapshots.js",
       "includedInRelease": true,
-      "sha256": "5B03686D590E55927B6BAA7D494FBA074DB1381AF662A74C6DFF3F12F1D460BC"
+      "sha256": "8B4A3CE88E9AA7D2F900972706DE0EA3471B8D89520545DB11EC14E5F435D26C"
     },
     {
       "path": "app/reader-lookup-ui.js",
@@ -419,12 +414,7 @@
     {
       "path": "app/backup-webdav-settings.js",
       "includedInRelease": true,
-      "sha256": "A50263E40B05655AB7BA0CA9BC00AEA58F3F57E5D852B5A69DA4F27305D6433E"
-    },
-    {
-      "path": "app/game-installations.js",
-      "includedInRelease": true,
-      "sha256": "AD392973795AFB997ADD31C86DA53F6B4C1FB35254FD8F5D6AF49FF8C08AF730"
+      "sha256": "ECE34C01D9ABCA28BADD579475CD9B2C362AAF66A9211628E50ECF2D540EDE56"
     },
     {
       "path": "app/lyrics-batch.js",
@@ -464,7 +454,7 @@
     {
       "path": "app/webdav-library-sync.js",
       "includedInRelease": true,
-      "sha256": "E0975BEEF242FEE2C6271E06BF9B80E349001C410C41F869F84DCBB832A87A0F"
+      "sha256": "39FCFD0DD85974BD87997D397A03E82EC13954A494C52E00330D133A323901E2"
     },
     {
       "path": "tests/metadata-search-form.cjs",
@@ -687,11 +677,6 @@
       "sha256": "8D6C9CDD6F4F9A251952366BCDA09B087B76D50FE598954121731D3117C6DCE0"
     },
     {
-      "path": "app/audio-window.js",
-      "includedInRelease": true,
-      "sha256": "74E674CAF146517DEDD3E98470FB0A19C67B65AD1EA155B78E8E38C84FC2BA3D"
-    },
-    {
       "path": "app/metadata-html.js",
       "includedInRelease": true,
       "sha256": "107A2179648C81DC0BABD9418D2A948CB2A73518A682D3772EBE2AD76845A501"
@@ -719,7 +704,7 @@
     {
       "path": "app/renderer.js",
       "includedInRelease": true,
-      "sha256": "D02FCD3913783F8B0E4329608B014CD434D603B05858C7E85FC33B776F93627A"
+      "sha256": "A7C672A7BD38E83E24F32A45D9BB8D5E7B95D9D719083CA2AB42D9C5757FE7BE"
     },
     {
       "path": "app/import-session-model.js",
@@ -740,11 +725,6 @@
       "path": ".gitattributes",
       "includedInRelease": false,
       "sha256": "8B9C3028D6467FF3BE7C793141927841D70F47F52D0590677438F488CA154992"
-    },
-    {
-      "path": "app/audio-player-layout.css",
-      "includedInRelease": true,
-      "sha256": "886137D128F5A9EEF9F5057B3D88A6DE5D339E2EA367B655F41E9FD18EC27D89"
     },
     {
       "path": "app/codec/LICENSE-LGPLv3.txt",
@@ -804,7 +784,7 @@
     {
       "path": "tests/relations.cjs",
       "includedInRelease": false,
-      "sha256": "9D05592399443B2CB2716FA6EFFBB12179CA9702E21F908B1D4385ED18D220DF"
+      "sha256": "ACF78ED16C22A2997698E74879211D06CB413BFA2B8C0CE5169AADB050BD5DEE"
     },
     {
       "path": "tests/native-234.cjs",
@@ -824,7 +804,7 @@
     {
       "path": "tests/save-cloud-only.cjs",
       "includedInRelease": false,
-      "sha256": "6C933EB7577577CF39D01A59BD78263507D4A90C8DE1D00B552CD2FECAFB8390"
+      "sha256": "F6945D900AB1BBE6A24E54EB34BFE25536922CB44D5A88E0E2E74B21FDD15B14"
     },
     {
       "path": "app/reader-ocr-model.js",
@@ -924,7 +904,7 @@
     {
       "path": "tests/webdav-sync-refactor.cjs",
       "includedInRelease": false,
-      "sha256": "D26E4919E20AEDB2242EFF13F9EF30612827E8FDE8A4C49F34D7F46E9117D3D3"
+      "sha256": "F360D753F31DAE0C53125CD0C7BAB3D17C1CC077B1111A88281AFBF8E8440354"
     },
     {
       "path": "app/vendor/cmaps/UniJISPro-UTF8-V.bcmap",
@@ -974,7 +954,7 @@
     {
       "path": "tests/webdav-client.cjs",
       "includedInRelease": false,
-      "sha256": "8D5025C0760B5931E4C1C42C13886F90730877DBCDCD5721AD269B4DDADEF904"
+      "sha256": "08CCBC4F29AADB5FE46B8C80386C7AF15F657376CA90CB800E74751DD0E5117F"
     },
     {
       "path": "app/cover-completion.js",
@@ -1034,7 +1014,7 @@
     {
       "path": "app/styles.css",
       "includedInRelease": true,
-      "sha256": "194EB67914323E906CFDBF08FF3B3E1B6F38F0B7DA4EBECC1E289EDDADB1A2A3"
+      "sha256": "DDA72B19A2CFDF68BDC3B3BC2779088A4C45D0294761191119B372AA8DCB765C"
     },
     {
       "path": "app/metadata-refresh-job.js",
@@ -1144,7 +1124,7 @@
     {
       "path": "tests/backup-webdav-settings.cjs",
       "includedInRelease": false,
-      "sha256": "5965D6C5D068FD111BB360593265785BBD8FFE74FA6C94388E5FCFDDDB54C05C"
+      "sha256": "8959C447799B9D5CD13A34380515A9FD64F819F85CC241A7FB8817773E24FC1C"
     },
     {
       "path": "tests/fullscreen-layout.cjs",
@@ -1214,7 +1194,7 @@
     {
       "path": "tests/webdav-save-transfer.cjs",
       "includedInRelease": false,
-      "sha256": "A038D2C891978DA9684F365BF8693D6753D11C01FE67F3B5E2E5AC49C0C28952"
+      "sha256": "CEA21999E570313A4426922458CD7A08002655EB2BAB325B64891CBDDEDD6D13"
     },
     {
       "path": "app/vendor/cmaps/UniCNS-UCS2-V.bcmap",
@@ -1399,7 +1379,7 @@
     {
       "path": "tests/webdav-save-catalog-write.cjs",
       "includedInRelease": false,
-      "sha256": "40BD76DFF6DE879F6318DFCCC541A3859B22F64125DBF4740EFB3900F248F18D"
+      "sha256": "A2C6650C3FF39803CEC1AEF82EB24344B2B58AD2CC7630B462F5E43D3B79CEF2"
     },
     {
       "path": "app/reader-preload.js",
@@ -1509,7 +1489,7 @@
     {
       "path": "app/webdav-save-catalog.js",
       "includedInRelease": true,
-      "sha256": "56B2CF44CA320AC35BFD7BAB342DEC53C1C77F3D8F42B7389EBF51ABF866CB0C"
+      "sha256": "088D8856DBD8CCAD82650AD14B8A56DA4534BDC786F25A0A8BE8F55886CF8890"
     },
     {
       "path": "tests/reader-speech-runtime.cjs",
@@ -1519,7 +1499,7 @@
     {
       "path": "app/preload.js",
       "includedInRelease": true,
-      "sha256": "DB399B47EA60DCB8F02C01A0645BC0AC0191B9A278427114B4D5291EA73103D5"
+      "sha256": "0030EE3EBF71806E30F2A0FE83DC7981A57AB9653F6B9C50AB1FE0B911BCD241"
     },
     {
       "path": "app/vendor/cmaps/GBTpc-EUC-V.bcmap",
@@ -1794,7 +1774,7 @@
     {
       "path": "app/webdav-client.js",
       "includedInRelease": true,
-      "sha256": "D1E0C5A239903CD89EF7A54E88615CF44D11CE997325DBDBAFE4507342667F79"
+      "sha256": "CD944171C1FC38F9FCA9D7235BF19826910E6B7114C1EA8FC392D27B17A2819F"
     },
     {
       "path": "app/vendor/cmaps/HKdlb-B5-H.bcmap",
@@ -1810,11 +1790,6 @@
       "path": "app/vendor/cmaps/UniGB-UTF16-H.bcmap",
       "includedInRelease": true,
       "sha256": "386FD39581245C034DA016A92D23F3DF1117D169F996100050B264FC09A84E35"
-    },
-    {
-      "path": "app/audio-window.html",
-      "includedInRelease": true,
-      "sha256": "AF7D92E2CA7C2554BB7D6CBA1AA67AD0E45EDED4254B400FD66A8638D33992E7"
     },
     {
       "path": "app/metadata-book-diagnostics.js",
@@ -1994,7 +1969,7 @@
     {
       "path": "app/webdav-sync-choice-session.js",
       "includedInRelease": true,
-      "sha256": "541E1C17A46A45653FC4E9791886DFFCDD3CCD20234ABE9ABDE759C1A90017DA"
+      "sha256": "7242942837819B7057272DF88F51B1BCA3CE86546171ECAC72E4A6FB2A987DC8"
     },
     {
       "path": "app/vendor/cmaps/Roman.bcmap",
@@ -2024,7 +1999,7 @@
     {
       "path": "tests/filter-ui.cjs",
       "includedInRelease": false,
-      "sha256": "BABE4A5C50D6901DBC900F94B5B19DC15EEF8C113784D2B79C0DAF46AF3318B5"
+      "sha256": "7C82C989EA690E85B15CC2D75D665E882F4F63C75C11C1F5C1C31E8AD2E587BF"
     },
     {
       "path": "app/scan-entry-ownership.js",
@@ -2090,11 +2065,6 @@
       "path": "tests/native-import-dialog-stack.cjs",
       "includedInRelease": false,
       "sha256": "8483A77296EC832F48A8B53A2C54D47244CDE9573F3367BAAEAB3BF6F90C2F3D"
-    },
-    {
-      "path": "app/audio-ui.js",
-      "includedInRelease": true,
-      "sha256": "BCFA82D4AB68E50259CC446B3E8AB119D5DBD09BD9B9FE2EA7B6A046B21C7B13"
     },
     {
       "path": "app/player/native/VideoHost.exe",
@@ -2172,11 +2142,6 @@
       "sha256": "EF13E624147C185F34CEA4A9533A1AFD8E0B5799A576B3E52383AA22A4EF71FD"
     },
     {
-      "path": "docs/CODEX/_HANDOFF.md",
-      "includedInRelease": false,
-      "sha256": "4A48CF36A8E4D54DE058B36EA9AF0FB75FD310D4799930972805A9D18DFC3CD5"
-    },
-    {
       "path": "app/vendor/cmaps/90ms-RKSJ-H.bcmap",
       "includedInRelease": true,
       "sha256": "C13E043E85FF715B75BB03801E8FD0FB8F3A75E4A48496FAA6BAAF92B5B48BA1"
@@ -2224,7 +2189,7 @@
     {
       "path": "app/main.js",
       "includedInRelease": true,
-      "sha256": "6C68C3BE2A914B1E9D6D61C393102868DF47BDFA1D065048804A6CD6F5BB1D01"
+      "sha256": "232E4A34F6411C950D0D6FA5010B47AF1B6D451B7D7C33F3A95567D5C918C204"
     },
     {
       "path": "app/player/dist/window-controls.js",
@@ -2269,7 +2234,7 @@
     {
       "path": "tests/portable-relations.cjs",
       "includedInRelease": false,
-      "sha256": "E526A1C8CAA93273D47D9A13754BE634480C91B6AC98551B172F26D4A1008D36"
+      "sha256": "7925FBBE00DAA974B1B2161047D1F6A5909FCCC04B10DE18907862CC33FDDA75"
     },
     {
       "path": "app/vendor/standard_fonts/FoxitSerifBoldItalic.pfb",
@@ -2279,12 +2244,12 @@
     {
       "path": "app/design-system.css",
       "includedInRelease": true,
-      "sha256": "3743E8A7CAD09AE488677B7800AADB4BA87064308A228F35DC038D264EE2ACDC"
+      "sha256": "A45C6F4BEF3080A65795453164B72D4CCD16EDB7A929964055FD2A810469963E"
     },
     {
       "path": "app/webdav-state.js",
       "includedInRelease": true,
-      "sha256": "720AE47F7AC6A58136F6AB7F07E293000C4A0E976F4696666B6020983627E806"
+      "sha256": "C66C6FBB2977A6ED281D4EB3DDE4771E74B12358BDFE80463EE7F0C59EBC91A2"
     },
     {
       "path": "app/audio-model.js",
@@ -2345,11 +2310,6 @@
       "path": "app/vendor/cmaps/Adobe-CNS1-UCS2.bcmap",
       "includedInRelease": true,
       "sha256": "E665837F2197C6BD08CD8955AD4D6932CEE2398E2E328B25B00E6BFB3BD72AF9"
-    },
-    {
-      "path": "app/audio-window-preload.js",
-      "includedInRelease": true,
-      "sha256": "0B3D34FB356F3A7C59938067518CA57716933F8F3FB3A184570DDB50C7CFCAAE"
     },
     {
       "path": "app/vendor/cmaps/UniJIS-UTF32-H.bcmap",
@@ -2424,7 +2384,7 @@
     {
       "path": "app/webdav-endpoint-key.js",
       "includedInRelease": true,
-      "sha256": "06AC012ADCDEEDBD46D4D62C7B2D689B7E0D68212E8D005BAC8164331D877E7C"
+      "sha256": "334669CCB673EB0079D097238608646B706CB7356FAB17369F777F2576D38CC3"
     },
     {
       "path": "app/player/vendor/materials/manifest.json",
@@ -2469,7 +2429,7 @@
     {
       "path": "tests/native-237-theme.cjs",
       "includedInRelease": false,
-      "sha256": "EB06247C8891E7EECE0D689FCD4A3249FABD74EFEA1EA9DB4885EAE92C3A68D4"
+      "sha256": "1771AE42D5B6114AC756B1516E6D1684BEB2D08B2F4F297A02BE8E508B898061"
     },
     {
       "path": "tests/playback-seek.cjs",
@@ -2574,7 +2534,7 @@
     {
       "path": "app/filter-ui.js",
       "includedInRelease": true,
-      "sha256": "BDC80337BE57FCA88D0722A8E581DFA911987F4FA1069A7B8611450A98285283"
+      "sha256": "F17C6EBBA2C5DA759918973941649046020D8F73174053DB90D1E0C0C5D56AEE"
     },
     {
       "path": "tests/scan-directory-preview.cjs",
@@ -2624,7 +2584,7 @@
     {
       "path": "tests/native-redesign-checks.cjs",
       "includedInRelease": false,
-      "sha256": "36E05ED47E34BE62B60A4761D7E9F415589A4E1BC598EDA44BA24CDA74C36AB9"
+      "sha256": "DEA8FE9C1A2E9D2701DCE6417A0247596DBFB9D97F883CAFCDE9763C167A85A0"
     },
     {
       "path": "app/vendor/cmaps/UniGB-UCS2-V.bcmap",
@@ -2644,7 +2604,7 @@
     {
       "path": "app/library-selection.js",
       "includedInRelease": true,
-      "sha256": "22BC738CCD12A01C6D28DBBB0FFF00B805E1469B0850FDAFDB163299CE50895A"
+      "sha256": "B34CAD6E297EE11F211E4863004532F21CC59CE70285841DBA3984092EB3F864"
     },
     {
       "path": "app/native/ResourcePicker.cs",
@@ -2659,7 +2619,7 @@
     {
       "path": "app/library-relations.js",
       "includedInRelease": true,
-      "sha256": "88B2F80A0CFC7C9D8E9787481F631B58109B67F398FEDC4265C553B536F1EB30"
+      "sha256": "F7F4FEF1E6775B2B3C3B8FD741541464EC30D8F250544CDBC680F3E03D165F02"
     },
     {
       "path": "app/vendor/cmaps/UniJIS-UCS2-HW-V.bcmap",
@@ -2759,7 +2719,7 @@
     {
       "path": "tests/native-scanner-checks.cjs",
       "includedInRelease": false,
-      "sha256": "1CBC01A473081158D78CA27BF403A55D28401AB42B0BBDDBA14067146BD7AC47"
+      "sha256": "A6DB59BCF5108A5BD6E8F2B3D4B19DCCD75682BDBC8402901161115C8D0BE642"
     },
     {
       "path": "app/player/dist/snap.js",
@@ -2804,7 +2764,7 @@
     {
       "path": "tests/save-snapshots.cjs",
       "includedInRelease": false,
-      "sha256": "0964902748545669154D16EA0E3DB1692340F6F627D7BAF91EFCFCD92EA1D348"
+      "sha256": "E88B797784A9F5D9BC5F7DA4AAA39F9A9D64931F7A519B37309EF50D4E453D51"
     },
     {
       "path": "app/vendor/cmaps/UniJISPro-UCS2-HW-V.bcmap",
@@ -2844,12 +2804,7 @@
     {
       "path": "app/package.json",
       "includedInRelease": true,
-      "sha256": "15E28B6908F29CF41B3461CBD9BF8E1EE6895B462335DCC05CA674D64C0E0AE0"
-    },
-    {
-      "path": "app/audio-window-renderer.js",
-      "includedInRelease": true,
-      "sha256": "2997C997F325002002FDFB574C66A62A7E83279621F877DA6ECDF9C0CF009CAA"
+      "sha256": "D987235DCBFC31B517104F11AEEFD54F96DA27DDFD874B06984C29F11191AE16"
     },
     {
       "path": "tests/native-241-ui.cjs",
@@ -3059,7 +3014,7 @@
     {
       "path": "app/reader-progress-store.js",
       "includedInRelease": true,
-      "sha256": "9E9A339781BC9898E66BF0573429203613917C33C4870F5F719C989681CCD4CF"
+      "sha256": "32B0363967F69EC31868CE8D701F9CD06E6A8A3CD01B6E0A6A1903C7B4DF816B"
     },
     {
       "path": "app/quick-disguise.js",
@@ -3194,7 +3149,7 @@
     {
       "path": "app/usage-ui.js",
       "includedInRelease": true,
-      "sha256": "98BDC51805463564DFC1C310BF68854A451561CAACC340443711AC506958C03F"
+      "sha256": "893E4815D53F855E2CD12DAFB47EF1E0747F746AD0A150C0D0172760D078A8A7"
     },
     {
       "path": "app/v19-layout.css",
@@ -3259,7 +3214,7 @@
     {
       "path": "packaging/Launcher.cs",
       "includedInRelease": false,
-      "sha256": "CDA8F5E77851E2ABDA26FBBAADA3B7F69CF28B196644D43B52B7C1D430A9B84C"
+      "sha256": "9579478C247A024B8FCB85C2EA7BF0102A130EF0341A37660CA480502B185862"
     },
     {
       "path": "app/vendor/standard_fonts/LICENSE_LIBERATION",
@@ -3334,7 +3289,7 @@
     {
       "path": "tests/webdav-state.cjs",
       "includedInRelease": false,
-      "sha256": "AABC489A163B81F8C9C454C26C30FD0CBCFFCBEDDECF4580B4D5604F9AF75E07"
+      "sha256": "DDF7A2283B3AC70DBCF2D5C12941B7C598272AC499342E4A0C045B8A6AC6705F"
     },
     {
       "path": "app/vendor/cmaps/Adobe-GB1-5.bcmap",
@@ -3424,7 +3379,7 @@
     {
       "path": "app/library-actions.css",
       "includedInRelease": true,
-      "sha256": "A6E77A565506CA71682E930427888510A15757008907E5DAFAE887385EEDF352"
+      "sha256": "B9D7F2E06A765073F38D6A2A7D6D97E0AD76C8B35310D84C79A8DBAAE090774B"
     },
     {
       "path": "app/application-identity.js",
@@ -3567,11 +3522,6 @@
       "sha256": "ADA8AF2737E8052FF511DE42AFD058F1E71FA8C80898415D82E12B57573C74AB"
     },
     {
-      "path": "docs/test-results/new-tests.txt",
-      "includedInRelease": false,
-      "sha256": "9A3E53ACC4C0366D42E5C028E46689CD9DA7671ABBDE0B7B6DDDEB3651AC5054"
-    },
-    {
       "path": "tests/usage-check.cjs",
       "includedInRelease": false,
       "sha256": "61400034DB6B216824D5AA639BD20FF0B3CCD60ADAD37BF9C9E741FE7A5EFBC2"
@@ -3589,7 +3539,7 @@
     {
       "path": "app/webdav-cover-sync.js",
       "includedInRelease": true,
-      "sha256": "DDFA62AFFFC514330F856FD7F30AEB596DE1E5C9757CF8F3DC6EEFB11A9759C8"
+      "sha256": "A02FF8CF1E87561FFBAD8CC8FE7B334CF01E99FD3A6FD9625B046A92D4D4A6AA"
     },
     {
       "path": "app/scan-grouping.js",
@@ -3669,7 +3619,7 @@
     {
       "path": "app/usage-service.js",
       "includedInRelease": true,
-      "sha256": "975C13BE21F917AB606CB6B3FC68043E42FA2AC83488D9BBA967921DBD7E745E"
+      "sha256": "E5F1DF121717EA4006881DAB36C891A7F1330A9BFC73C08A61743369ACCAA386"
     },
     {
       "path": "tests/reader-prefetch-check.cjs",
@@ -3734,12 +3684,12 @@
     {
       "path": "app/webdav-save-catalog-write.js",
       "includedInRelease": true,
-      "sha256": "A56F8B94E93534A7D09D6A53FD9D88BAA6BBAFAE237C2ED9E6A369972582C0C7"
+      "sha256": "F4A1C364626A4C9142E5C8710252107B3BF4B5BF6F62A3187FBF9022D97CA5E4"
     },
     {
       "path": "app/ipc-guard.js",
       "includedInRelease": true,
-      "sha256": "D5A2DE9933E85910ED08AFAB01B69DDCCCD9A082CC958020067FE25792EC302B"
+      "sha256": "47312E3746EABC94736D7B81E453FE5019A28D5368B4CC3A2C6BBA4CAEE7EC6B"
     },
     {
       "path": "app/player/vendor/materials/mpv-LICENSE.LGPL.txt",
@@ -3750,11 +3700,6 @@
       "path": "app/vendor/cmaps/UniGB-UTF8-H.bcmap",
       "includedInRelease": true,
       "sha256": "F217B439C80EE5FA1BC2CF6D1DEFCC319F8D84483D166A00EE199E05A68588DF"
-    },
-    {
-      "path": "docs/test-results/new-tests.json",
-      "includedInRelease": false,
-      "sha256": "3686DA552A6DCF095B5C28B95E8386AF7155354C69A3AD77B0D19370D88992CF"
     },
     {
       "path": "app/vendor/cmaps/UniJIS2004-UTF8-V.bcmap",
@@ -3814,7 +3759,7 @@
     {
       "path": "README.md",
       "includedInRelease": false,
-      "sha256": "8CAAAA05B009DB9BA88762674270EBBDC5FA0A9DD4B32CBB7B5D03C7B424DA3E"
+      "sha256": "2B4E3BF20BE59064471F95A6281C3970F3C89E46C6D9E89BE6A5D9D602FC0AAD"
     },
     {
       "path": "app/player/dist/service.d.ts",
@@ -3845,6 +3790,46 @@
       "path": "tests/metadata-diagnostic-render.cjs",
       "includedInRelease": false,
       "sha256": "D4AEF3723CDAEBE68100CAC92B7A09A15EFDF3798668DEDBF5DD68FEE2F979A1"
+    },
+    {
+      "path": "CHANGELOG.md",
+      "includedInRelease": false,
+      "sha256": "66BD732B28D0603F18B75219AC315EBB02FC0636509DFD4DE3BA52466CB749EB"
+    },
+    {
+      "path": "app/save-snapshot-association.js",
+      "includedInRelease": true,
+      "sha256": "F7DEA5AB214F800AA8F780EB17EB2E092B926F656D9E8C2F1717246A0B6D725B"
+    },
+    {
+      "path": "app/save-snapshot-selection.js",
+      "includedInRelease": true,
+      "sha256": "C66AB331EDEEA9FFF13DF48E3A3703FD539989F3B4F0B63DD7C4DA8E1EEA2097"
+    },
+    {
+      "path": "app/webdav-cover-upload-checkpoint.js",
+      "includedInRelease": true,
+      "sha256": "45C56CEDC425082B839D8BC8BFA32B214B6B6A5E37B453CB39332B1DB7740B4B"
+    },
+    {
+      "path": "app/webdav-verification.js",
+      "includedInRelease": true,
+      "sha256": "12E1C4DAE52E9EEB9195FB38E348B4C01AF32DBE377E2C657DCBB569944AD200"
+    },
+    {
+      "path": "tests/save-snapshot-association.cjs",
+      "includedInRelease": false,
+      "sha256": "8E149F4E8467EC2FAF658F3FC0B17D8AB3AB5CEE4C539CCDEC1E44E53721DC57"
+    },
+    {
+      "path": "tests/save-snapshot-selection.cjs",
+      "includedInRelease": false,
+      "sha256": "7B2EB6D0D90869CBB9B070FFF5A39DDA9FC0CA5017A0E9536E225CA4282B7792"
+    },
+    {
+      "path": "tests/webdav-main-config.cjs",
+      "includedInRelease": false,
+      "sha256": "4D461BCBD70A70B57996876ECB5F26897637092EA828F3B01C52624C01276AAF"
     }
   ]
 }

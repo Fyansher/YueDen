@@ -4,7 +4,7 @@ const Catalog=require('../app/webdav-save-catalog');
 
 test('cloud catalog keeps display metadata without changing snapshot object references',()=>{
  const id='items/Game--0123456789/2026-10-08_12-00-00',hash='a'.repeat(64);
- const catalog=Catalog.create([{id,manifestHash:'manifest-rev',metadata:{itemId:'game-1',gameName:'Example Game',createdAt:'2026-10-08T12:00:00.000Z',note:'Chapter 3',files:2,size:99},objects:[{object:`objects/aa/${hash}.bin`,sha256:hash,size:50,storedSize:99,encoding:'raw'}]}]);
+ const catalog=Catalog.create([{id,manifestHash:'manifest-rev',metadata:{itemId:'game-1',gameName:'Example Game',createdAt:'2026-10-08T12:00:00.000Z',note:'Chapter 3',files:2,size:99,paths:['D:/Saves/Example'],resourceIdentity:{steamAppId:'123'}} ,objects:[{object:`objects/aa/${hash}.bin`,sha256:hash,size:50,storedSize:99,encoding:'raw'}]}]);
  const loaded=Catalog.parse(JSON.parse(JSON.stringify(catalog)));
  assert.deepEqual(loaded.entries[0].metadata,catalog.entries[0].metadata);
  assert.equal(loaded.entries[0].objects.length,1);
@@ -36,4 +36,27 @@ test('normal WebDAV sync does not download cloud snapshot objects; explicit rest
  assert.match(restore,/readRemoteSnapshotManifest/);assert.match(restore,/verifyObjectFile/);assert.match(restore,/saveSnapshots\.restore/);
  const listing=main.slice(main.indexOf('async function listRemoteSaveSnapshots('),main.indexOf('async function refreshRemoteSaveCatalogForWrite('));
  assert.match(listing,/remoteOnly:!localAvailable/);assert.match(listing,/metadata/);
+});
+
+test('unlinked snapshot controls show local paths and associate only visible rows',()=>{
+ const renderer=fs.readFileSync(path.join(__dirname,'../app/renderer.js'),'utf8');
+ assert.match(renderer,/function unlinkedSnapshotRows\(\)/);
+ assert.match(renderer,/function visibleSnapshotRows\(\).*filterItems\(\)\.flatMap\(item=>unlinkedSnapshotsFor\(item\.id\)\)/);
+ assert.match(renderer,/data-snapshot-associate-target=/);
+ assert.doesNotMatch(renderer,/<label class="snapshot-manual-associate"><select/,'the resource selector and action button are not nested inside a label');
+});
+
+test('snapshot-only bulk selection is enabled and can be toggled without resource cards',()=>{
+ const selection=fs.readFileSync(path.join(__dirname,'../app/library-selection.js'),'utf8');
+ assert.match(selection,/SaveSnapshotSelection\.hasRows\(resourceIds,snapshotIds\)/);
+ assert.match(selection,/SaveSnapshotSelection\.toggleAll\(itemIds,saveIds,librarySelection\.ids,snapshotSelection\)/);
+ assert.match(selection,/SaveSnapshotSelection\.allSelected\(resourceIds,snapshotIds,librarySelection\.ids,snapshotSelection\)/);
+ const css=fs.readFileSync(path.join(__dirname,'../app/library-actions.css'),'utf8');
+ assert.match(css,/\.snapshot-group-select,\.snapshot-row-select\{[^}]*width:28px;height:28px/,'snapshot selection controls have a practical click target');
+});
+
+test('mixed resource and snapshot deletion keeps cloud-only selections and does not discard the visible cloud index',()=>{
+ const renderer=fs.readFileSync(path.join(__dirname,'../app/renderer.js'),'utf8');
+ assert.match(renderer,/SaveSnapshotSelection\.planDeletion\(\{resourceIds:wanted,localSnapshots:backups,visibleSnapshots:snapshotIndex,selectedSnapshots:selectedBackups\}\)/);
+ assert.doesNotMatch(renderer,/snapshotIndex=backups/,'a local-only refresh must not replace the combined local/cloud snapshot index');
 });

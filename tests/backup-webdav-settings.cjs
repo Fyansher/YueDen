@@ -28,3 +28,12 @@ test('malformed optional local WebDAV backup fields do not replace existing sett
   assert.equal(resolved.webdavUsername, 'new-user');
   assert.equal(resolved.webdavRemotePath, current.webdavRemotePath);
 });
+
+test('full backups keep local scan, import and Obsidian paths',()=>{
+  const source={obsidianRoot:'D:/Notes',localScanPaths:['D:/Steam/steamapps/common'],refreshWhitelist:['game-1'],localResourceRoots:{book:['D:/Books'],audio:['E:/Music']}};
+  const saved=Backup.exportLocalDeviceSettings(source),restored=Backup.restoreLocalDeviceSettings({},saved);
+  assert.deepEqual(restored,source);
+  assert.deepEqual(Backup.restoreLocalDeviceSettings({obsidianRoot:'keep'},undefined),{obsidianRoot:'keep'});
+  assert.deepEqual(Backup.restoreLocalDeviceSettings({}, {localResourceRoots:{book:['x'],constructor:['bad']}}),{localResourceRoots:{book:['x']}});
+  assert.deepEqual(Backup.exportLocalDeviceSettings({}).localResourceRoots,{});
+});

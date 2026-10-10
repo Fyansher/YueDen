@@ -250,7 +250,7 @@ function create(root) {
     while (fs.existsSync(path.join(itemFolder, snapshotName))) snapshotName = `${stamp}-${String(suffix++).padStart(2, '0')}`;
     const folder = path.join(itemFolder, snapshotName), stage = path.join(base(), '.staging', `${process.pid}-${crypto.randomBytes(8).toString('hex')}`);
     fs.mkdirSync(stage, { recursive: true });
-    const manifest = { schema: 2, itemId, gameName, note: String(options.note || '').trim().slice(0, 2000), createdAt, entries: [] };
+    const manifest = { schema: 2, itemId, gameName, note: String(options.note || '').trim().slice(0, 2000), createdAt, ...(options.resourceIdentity&&typeof options.resourceIdentity==='object'?{resourceIdentity:JSON.parse(JSON.stringify(options.resourceIdentity))}:{}), entries: [] };
     try {
       for (let index = 0; index < valid.length; index += 1) {
         const source = path.resolve(valid[index]), tree = walkSource(source);
@@ -284,7 +284,8 @@ function create(root) {
       const legacyFiles = isPacked ? [] : listFiles(folder).filter(localFile => localFile !== file),
         files = isPacked ? manifest.entries.reduce((sum, entry) => sum + (entry.files?.length || 0), 0) : legacyFiles.length,
         size = isPacked ? manifest.entries.reduce((sum, entry) => sum + (entry.files || []).reduce((n, stored) => n + (Number(stored.storedSize) || 0), 0), 0) : legacyFiles.reduce((sum, localFile) => { try { return sum + fs.statSync(localFile).size; } catch { return sum; } }, 0);
-      return { id: relativeId(base(), folder), itemId, folder, createdAt: manifest.createdAt || path.basename(folder), updatedAt: manifest.updatedAt || manifest.createdAt || '', gameName: manifest.gameName || '', note: manifest.note || '', entries: manifest.entries || [], files, size, syncStatus: '', manifestHash };
+      const entries=manifest.entries||[],paths=[...new Set(entries.flatMap(entry=>[entry.source,...Object.values(entry.sourceByDevice||{})]).filter(value=>typeof value==='string'&&value))];
+      return { id: relativeId(base(), folder), itemId, folder, createdAt: manifest.createdAt || path.basename(folder), updatedAt: manifest.updatedAt || manifest.createdAt || '', gameName: manifest.gameName || '', note: manifest.note || '', entries, paths, resourceIdentity:manifest.resourceIdentity||null, files, size, syncStatus: '', manifestHash };
     }).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
   }
   function listAll(items = []) {
@@ -296,14 +297,25 @@ function create(root) {
     }
     return manifestIndex().flatMap(({ file, folder, rootName, manifest, manifestHash }) => {
       const itemId = manifest.itemId || legacyIds.get(rootName);
-      if (!itemId) return [];
+      if (!itemId && !manifest.gameName) return [];
       const isPacked = manifest.schema >= 2 && Array.isArray(manifest.entries?.[0]?.files);
       const entries = Array.isArray(manifest.entries) ? manifest.entries : [];
       const legacyFiles = isPacked ? [] : listFiles(folder).filter(localFile => localFile !== file),
         files = isPacked ? entries.reduce((sum, entry) => sum + (entry.files?.length || 0), 0) : legacyFiles.length,
         size = isPacked ? entries.reduce((sum, entry) => sum + (entry.files || []).reduce((n, entryFile) => n + (Number(entryFile.storedSize) || 0), 0), 0) : legacyFiles.reduce((sum, localFile) => { try { return sum + fs.statSync(localFile).size; } catch { return sum; } }, 0);
-      return [{ id: relativeId(base(), folder), itemId, folder, createdAt: manifest.createdAt || path.basename(folder), updatedAt: manifest.updatedAt || manifest.createdAt || '', gameName: manifest.gameName || '', note: manifest.note || '', entries, files, size, syncStatus: '', manifestHash }];
+      const paths=[...new Set(entries.flatMap(entry=>[entry.source,...Object.values(entry.sourceByDevice||{})]).filter(value=>typeof value==='string'&&value))];
+      return [{ id: relativeId(base(), folder), itemId: String(itemId||''), folder, createdAt: manifest.createdAt || path.basename(folder), updatedAt: manifest.updatedAt || manifest.createdAt || '', gameName: manifest.gameName || '', note: manifest.note || '', entries, paths, resourceIdentity: manifest.resourceIdentity||null, files, size, syncStatus: '', manifestHash }];
     }).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  }
+  function reassign(backupId, expectedItemId, newItemId, gameName, resourceIdentity) {
+    const id=String(backupId||''),from=String(expectedItemId||''),to=String(newItemId||'');
+    if(!id||!to)return {ok:false,message:'存档或目标资源无效'};
+    const target=safeTarget(base(),id),file=path.join(target,'manifest.json'),manifest=readManifest(file);
+    if(!manifest||String(manifest.itemId||from)!==from)return {ok:false,message:'存档快照已变化，请刷新后重试'};
+    manifest.itemId=to;if(typeof gameName==='string'&&gameName.trim())manifest.gameName=gameName.trim().slice(0,500);if(resourceIdentity&&typeof resourceIdentity==='object')manifest.resourceIdentity=JSON.parse(JSON.stringify(resourceIdentity));manifest.updatedAt=new Date().toISOString();
+    const temporary=path.join(target,`.manifest-${process.pid}-${crypto.randomBytes(6).toString('hex')}.tmp`);
+    try{fs.writeFileSync(temporary,JSON.stringify(manifest,null,2),{encoding:'utf8',flag:'wx'});fs.renameSync(temporary,file);refreshManifestIndex([file]);return {ok:true,entry:list(to).find(row=>row.id===id)||null};}
+    finally{fs.rmSync(temporary,{force:true});}
   }
   function updateNote(itemId, backupId, note) {
     if (!itemId || !list(itemId).some(entry => entry.id === backupId)) return { ok: false, message: '存档快照不存在或不属于当前游戏' };
@@ -380,7 +392,7 @@ function create(root) {
     for (const row of rows) {
       const itemId = String(row?.itemId || ''), id = String(row?.backupId || row?.id || '');
       try {
-        if (!itemId || !id || known.get(id) !== itemId) throw Error('存档快照不存在或不属于当前游戏');
+        if (!id || !known.has(id) || known.get(id) !== itemId) throw Error('存档快照不存在或不属于当前游戏');
         const target = safeTarget(base(), id);
         fs.rmSync(target, { recursive: true, force: false });
         if (fs.existsSync(target)) throw Error('快照仍然存在，请检查文件占用');
@@ -399,7 +411,7 @@ function create(root) {
     fs.mkdirSync(folder, { recursive: true });
     return folder;
   }
-  return { backup, list, listAll, refreshManifestIndex, updateNote, restore, remove, removeMany, openFolder, collectGarbage, itemFolderName };
+  return { backup, list, listAll, refreshManifestIndex, updateNote, reassign, restore, remove, removeMany, openFolder, collectGarbage, itemFolderName };
 }
 
 module.exports = { create, readableName, itemFolderName, collectGarbage, findManifests, digest, manifestHash, manifestContent, toRemoteManifest, restoreManifestForDevice, verifyObjectBytes, verifyObjectFile };

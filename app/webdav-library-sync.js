@@ -3,7 +3,9 @@ const SyncState = require('./webdav-state');
 const zlib = require('node:zlib');
 const crypto = require('node:crypto');
 
-const MAX_SYNC_STATE_BYTES = 1024 * 1024;
+// Keep the library limit comfortably above ordinary multi-hundred-item libraries.
+// It is applied symmetrically to the serialized JSON and incoming compressed/decompressed data.
+const MAX_SYNC_STATE_BYTES = 32 * 1024 * 1024;
 const MAX_SYNC_STATE_READ_MS = 15000;
 const MAX_SYNC_STATE_BODY_RETRIES = 2;
 const GZIP_MAGIC = Buffer.from([0x1f, 0x8b]);
@@ -194,7 +196,6 @@ function latestUpdatedAt(state) {
     ...(state?.deletedItems || []).map(item => item.deletedAt),
     ...(state?.playlists || []).map(item => item.updatedAt),
     ...(state?.referenceRedirects || []).map(item => item.updatedAt),
-    ...(state?.organizationHistory || []).map(item => item.updatedAt),
     state?.settingsUpdatedAt,
     state?.audioConnectionsUpdatedAt
   ];
@@ -203,7 +204,7 @@ function latestUpdatedAt(state) {
 }
 
 const MISSING = SyncState.MISSING;
-const keyedArrays = new Set(['items', 'deletedItems', 'deletedSaveSnapshots', 'playlists', 'referenceRedirects', 'organizationHistory', 'audioConnections', 'sources', 'tracks', 'entries', 'localFiles']);
+const keyedArrays = new Set(['items', 'deletedItems', 'deletedSaveSnapshots', 'playlists', 'referenceRedirects', 'audioConnections', 'sources', 'tracks', 'entries', 'localFiles']);
 const setArrays = new Set(['categories', 'genres', 'platforms', 'customCovers', 'aliases', 'lockedFields']);
 const syncMeta = new Set(['syncFormat', 'syncVersion', 'syncRevision', 'lineage', 'localDeviceId']);
 const timeFields = new Set(['updatedAt', 'deletedAt', 'settingsUpdatedAt', 'audioConnectionsUpdatedAt', 'autoMetadataAt', 'lastWebdavSyncAt', 'syncedAt']);
@@ -440,7 +441,7 @@ function decisionUnits(local, remote, conflicts) {
     const label = unit.kind === 'resource'
       ? String(localRow?.name || remoteRow?.name || unit.id)
       : unit.id != null ? String(localRow?.name || localRow?.title || remoteRow?.name || remoteRow?.title || unit.id)
-        : ({ settings: '设置', audioConnections: '远程音频库', playlists: '播放列表', referenceRedirects: '资源引用', organizationHistory: '组织记录', deletedItems: '资源删除记录', deletedSaveSnapshots: '存档删除记录' }[unit.field] || unit.field) + (unit.path && unit.path !== unit.field ? ' · ' + unit.path.slice(unit.field.length).replace(/^\./, '') : '');
+        : ({ settings: '设置', audioConnections: '远程音频库', playlists: '播放列表', referenceRedirects: '资源引用', deletedItems: '资源删除记录', deletedSaveSnapshots: '存档删除记录' }[unit.field] || unit.field) + (unit.path && unit.path !== unit.field ? ' · ' + unit.path.slice(unit.field.length).replace(/^\./, '') : '');
     const resourceTimes = unit.kind === 'resource' ? {
       localExists: localRow !== undefined && !(local.deletedItems || []).some(row => String(row.id) === String(unit.id)),
       remoteExists: remoteRow !== undefined && !(remote.deletedItems || []).some(row => String(row.id) === String(unit.id)),

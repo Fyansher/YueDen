@@ -69,6 +69,14 @@ test('legacy copied snapshots remain listable and restorable', async () => {
   assert.equal(fs.readFileSync(source, 'utf8'), 'old snapshot');
 });
 
+test('deleted resource snapshots stay visible, can be associated again, and can be cleaned without a resource row',async()=>{
+  const root=path.join(scratch,'unlinked'),source=path.join(scratch,'unlinked-save'),oldId='deleted-game-id',newId='reimported-game-id';
+  fs.writeFileSync(source,'save data');const storage=snapshots.create(root),created=await storage.backup(oldId,[source],{gameName:'One'}),id=created.folder.slice(root.length+1).replaceAll(path.sep,'/');
+  const orphan=storage.listAll([]).find(row=>row.id===id);assert.ok(orphan);assert.equal(orphan.itemId,oldId);assert.equal(orphan.paths[0],source);
+  const associated=storage.reassign(id,oldId,newId,'One',{steamAppId:'12345'});assert.equal(associated.ok,true);assert.equal(storage.list(oldId).length,0);assert.equal(storage.list(newId).some(row=>row.id===id),true);
+  const removed=storage.removeMany([{itemId:newId,backupId:id}],[]);assert.equal(removed.ok,true);assert.equal(removed.removed.length,1);assert.deepEqual(storage.listAll([]),[]);
+});
+
 test('synced manifests update the warm snapshot index without rescanning other snapshots', async () => {
   const root = path.join(scratch, 'incremental-index'), remoteRoot = path.join(scratch, 'incremental-remote'),
     source = path.join(scratch, 'incremental-save.dat'), gameId = 'incremental-game-id', items = [{ id: gameId, name: 'Incremental Game' }],

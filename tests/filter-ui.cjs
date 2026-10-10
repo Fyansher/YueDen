@@ -4,15 +4,18 @@ const fs=require('node:fs');
 const path=require('node:path');
 const ResourceFilters=require('../app/filter-ui');
 
-test('存档筛选向用户显示全部、有存档、无存档三个状态',()=>{
+test('存档筛选向用户显示全部、有存档、无存档和未关联存档',()=>{
   const filters=new ResourceFilters();
   assert.equal(filters.shouldShowSaveFilter('game'),true);
   assert.equal(filters.shouldShowSaveFilter('all'),false);
-  assert.deepEqual(filters.saveFilterOptions(),['all','has','none']);
+  assert.deepEqual(filters.saveFilterOptions(),['all','has','none','unlinked']);
   assert.equal(filters.saveFilterLabel('all'),'全部存档');
   assert.equal(filters.saveFilterLabel('has'),'有存档');
   assert.equal(filters.saveFilterLabel('none'),'无存档');
+  assert.equal(filters.saveFilterLabel('unlinked'),'未关联存档');
   assert.equal(filters.saveFilterLabel('unknown'),'全部存档');
+  const html=fs.readFileSync(path.join(__dirname,'../app/index.html'),'utf8');
+  assert.match(html,/<select id="saveFilter"[^>]*>[\s\S]*?<option value="unlinked">未关联存档<\/option>/,'the hidden select must accept the dynamically rendered unlinked option');
 });
 
 test('有无存档筛选只根据真实快照数量判断，并能随首份/末份快照切换',()=>{

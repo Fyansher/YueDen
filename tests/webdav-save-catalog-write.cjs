@@ -4,6 +4,8 @@ const test=require('node:test');
 const assert=require('node:assert/strict');
 const Writer=require('../app/webdav-save-catalog-write');
 const Catalog=require('../app/webdav-save-catalog');
+const Client=require('../app/webdav-client');
+const fixture=require('./webdav-fixture.cjs');
 
 const row=id=>({id,manifestHash:'rev-'+id,objects:[]});
 const catalog=(...ids)=>Catalog.create(ids.map(row));
@@ -80,6 +82,41 @@ test('412 causes a fresh read and remerge before the bounded retry',async()=>{
   assert.equal(result.catalog.revision,targets[1].revision);
 });
 
+test('catalog upload recovers from a transient socket close while refreshing after 412',async()=>{
+  const f=await fixture();
+  try{
+    let failNextCatalogRead=true;
+    const client=Client.create({fetch:async(url,options)=>{
+      if(options.method==='GET'&&url.pathname.endsWith('/saves/catalog.json')&&failNextCatalogRead){
+        failNextCatalogRead=false;
+        const error=new TypeError('fetch failed');error.cause={code:'UND_ERR_SOCKET'};throw error;
+      }
+      return globalThis.fetch(url,options);
+    }});
+    await client.ensurePath(f.settings);
+    await client.ensureDirectories(f.settings,'saves');
+    const initial=catalog('remote');
+    await client.request(f.settings,'PUT','saves/catalog.json',JSON.stringify(initial),'application/json');
+    const read=async()=>{
+      const response=await client.request(f.settings,'GET','saves/catalog.json');
+      if(response.status===404){await response.body?.cancel();return null;}
+      const text=await response.text();
+      return {catalog:Catalog.parse(JSON.parse(text)),etag:response.headers.get('etag')||'',lastModified:response.headers.get('last-modified')||'',byteLength:Buffer.byteLength(text)};
+    };
+    const refreshed=()=>Writer.refreshCurrent({stat:()=>client.stat(f.settings,'saves/catalog.json'),read});
+    const published=await Writer.publish({
+      current:{catalog:initial,etag:'"stale"'},localCatalog:catalog('local'),direction:'upload',merge:Catalog.merge,
+      refreshCurrent:refreshed,
+      put:(target,conditions)=>client.request(f.settings,'PUT','saves/catalog.json',JSON.stringify(target),'application/json',conditions),
+      verify:read
+    });
+    assert.equal(failNextCatalogRead,false,'fresh-connection retry completed the catalog reread');
+    assert.deepEqual(published.catalog.entries.map(entry=>entry.id),['local','remote']);
+    assert.equal(published.etag,'"2"');
+    assert.equal(f.requests.filter(row=>row.method==='PUT'&&row.path.endsWith('/saves/catalog.json')&&row.match).length,2);
+  }finally{await f.close();}
+});
+
 test('a successful PUT with a mismatched read-back is not confirmed',async()=>{
   await assert.rejects(()=>Writer.publish({
     current:null,localCatalog:catalog('local'),direction:'upload',merge:Catalog.merge,
@@ -96,4 +133,16 @@ test('a lost PUT response is accepted only when a fresh read confirms exact cata
   });
   assert.equal(result.catalog.revision,local.revision);
   assert.equal(result.uploaded,1);
+});
+
+test('a transient catalog read-back failure after a successful PUT is retried',async()=>{
+  const local=catalog('local');let writes=0,reads=0;
+  const result=await Writer.publish({
+    current:null,localCatalog:local,direction:'upload',merge:Catalog.merge,
+    refreshCurrent:async()=>null,put:async()=>{writes++;return okResponse('"stored"');},
+    verify:async()=>{reads++;if(reads===1)throw Error('temporary read-back interruption');return {catalog:local,etag:'"stored"'};}
+  });
+  assert.equal(writes,1);
+  assert.equal(reads,2);
+  assert.equal(result.catalog.revision,local.revision);
 });

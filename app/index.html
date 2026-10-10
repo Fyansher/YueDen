@@ -17,7 +17,7 @@
 <body>
   <div class="window-shell">
     <header class="titlebar">
-      <div class="window-brand"><img class="brand-glyph" src="assets/icon.svg" alt=""><span>悦森盒 YueDen</span><small>1.0.6</small></div>
+      <div class="window-brand"><img class="brand-glyph" src="assets/icon.svg" alt=""><span>悦森盒 YueDen</span><small>1.0.7</small></div>
       <div class="window-actions"><button id="minimizeBtn" aria-label="最小化" title="最小化"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8h10"/></svg></button><button id="maximizeBtn" aria-label="最大化" title="最大化"><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="3" y="3" width="10" height="10"/></svg></button><button id="closeBtn" class="close-window" aria-label="关闭" title="关闭"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m3 3 10 10M13 3 3 13"/></svg></button></div>
     </header>
     <div class="app-body">
@@ -25,13 +25,13 @@
         <div class="sidebar-top">
           <div class="section-label">工作区</div>
           <nav class="main-nav" id="mainNav">
-            <button class="nav-item active" data-view="dashboard"><span class="nav-icon">◈</span>总览<span class="nav-count" id="totalNavCount">0</span></button>
-            <button class="nav-item" data-view="all"><span class="nav-icon">▦</span>全部资源</button>
-            <button class="nav-item" data-view="game"><span class="nav-icon">⌁</span>游戏</button>
-            <button class="nav-item" data-view="movie"><span class="nav-icon">▣</span>影视</button>
-            <button class="nav-item" data-view="anime"><span class="nav-icon">✦</span>番剧</button>
-            <button class="nav-item" data-view="manga"><span class="nav-icon">▤</span>漫画</button>
-            <button class="nav-item" data-view="book"><span class="nav-icon">▤</span>书籍</button><button class="nav-item" data-view="audio"><span class="nav-icon">♫</span>声音</button>
+            <button class="nav-item active" data-view="dashboard"><span class="nav-icon">◈</span>总览</button>
+            <button class="nav-item" data-view="all"><span class="nav-icon">▦</span>全部资源<span class="nav-count" id="allResourceNavCount">0</span></button>
+            <button class="nav-item" data-view="game"><span class="nav-icon">⌁</span>游戏<span class="nav-count" data-resource-nav-count="game">0</span></button>
+            <button class="nav-item" data-view="movie"><span class="nav-icon">▣</span>影视<span class="nav-count" data-resource-nav-count="movie">0</span></button>
+            <button class="nav-item" data-view="anime"><span class="nav-icon">✦</span>番剧<span class="nav-count" data-resource-nav-count="anime">0</span></button>
+            <button class="nav-item" data-view="manga"><span class="nav-icon">▤</span>漫画<span class="nav-count" data-resource-nav-count="manga">0</span></button>
+            <button class="nav-item" data-view="book"><span class="nav-icon">▤</span>书籍<span class="nav-count" data-resource-nav-count="book">0</span></button><button class="nav-item" data-view="audio"><span class="nav-icon">♫</span>声音<span class="nav-count" data-resource-nav-count="audio">0</span></button>
           </nav>
           <div class="section-label section-label-spaced">管理</div>
           <nav class="main-nav">
@@ -60,7 +60,7 @@
 
         <section id="libraryView" class="view-panel hidden">
           <div class="library-toolbar"><div><span class="eyebrow" id="libraryEyebrow">资源列表</span><h2 id="libraryHeading">全部资源 <span id="resultCount">0</span></h2></div><div class="toolbar-actions"><button class="filter-button" id="filterToggle">☷ 筛选</button><div class="view-switch"><button type="button" class="view-switch-btn" data-layout="small" title="小卡片" aria-label="小卡片">▦</button><button type="button" class="view-switch-btn" data-layout="portrait" title="竖向封面" aria-label="竖向封面">▯</button><button type="button" class="view-switch-btn" data-layout="cards" title="横向封面" aria-label="横向封面">▭</button><button type="button" class="view-switch-btn" data-layout="list" title="列表" aria-label="列表">☷</button></div></div></div>
-          <div class="filters hidden" id="filters"><select id="statusFilter" multiple><option value="all">全部状态</option></select><select id="genreFilter" multiple><option value="all">全部标签</option></select><select id="categoryFilter" multiple><option value="all">全部分类</option></select><select id="yearFilter" multiple><option value="all">全部年份</option></select><select id="ratingFilter" multiple><option value="all">全部评分</option><option value="4">4 星及以上</option><option value="3">3 星及以上</option><option value="1">已评分</option></select><select id="saveFilter" class="hidden" aria-label="按存档筛选"><option value="all">全部存档</option><option value="has">有存档</option><option value="none">无存档</option></select><button class="clear-filter" id="clearFilters">清除筛选</button></div>
+          <div class="filters hidden" id="filters"><select id="statusFilter" multiple><option value="all">全部状态</option></select><select id="genreFilter" multiple><option value="all">全部标签</option></select><select id="categoryFilter" multiple><option value="all">全部分类</option></select><select id="yearFilter" multiple><option value="all">全部年份</option></select><select id="ratingFilter" multiple><option value="all">全部评分</option><option value="4">4 星及以上</option><option value="3">3 星及以上</option><option value="1">已评分</option></select><select id="saveFilter" class="hidden" aria-label="按存档筛选"><option value="all">全部存档</option><option value="has">有存档</option><option value="none">无存档</option><option value="unlinked">未关联存档</option></select><button class="clear-filter" id="clearFilters">清除筛选</button></div>
           <div id="libraryGrid" class="library-grid"></div>
           <div id="libraryEmpty" class="empty-state hidden"><div class="empty-art">✦</div><h3>这里还没有资源</h3><p>输入名称后点击添加，最少只需一步就能建立记录。</p><button class="add-button" id="emptyAdd">＋ 添加第一条</button></div>
         </section>
@@ -137,17 +137,17 @@
   <script src="library-covers.js"></script>
   <script src="library-cards.js"></script>
   <script src="library-polish.js"></script>
-  <script src="selection-range.js"></script><script src="library-selection.js"></script>
+  <script src="selection-range.js"></script><script src="save-snapshot-selection.js"></script><script src="library-selection.js"></script>
   <script src="library-tools.js"></script>
   <script src="card-quick-edit.js"></script>
   <script src="reorder-motion.js"></script><script src="library-drag.js"></script>
-  <script src="workspace-dialog.js"></script><script src="resource-organizer.js"></script><script src="library-relations.js"></script><script src="application-identity.js"></script><script src="resource-identity.js"></script><script src="local-model.js"></script>
+  <script src="workspace-dialog.js"></script><script src="library-relations.js"></script><script src="application-identity.js"></script><script src="resource-identity.js"></script><script src="local-model.js"></script>
   <script src="import-metadata-queue.js"></script><script src="import-session-model.js"></script><script src="import-controls.js"></script><script src="scan-ui.js"></script>
   <script src="scan-manual-groups.js"></script>
 <script src="local-import-ui.js"></script>
   <script src="media-player.js"></script>
   <script src="epub-image-styles.js"></script><script src="epub-notes.js"></script><script src="reader-prefetch.js"></script><script src="reader-controls.js"></script><script src="reader-color-picker.js"></script><script src="reader-background.js"></script><script src="reader-tabs.js"></script><script src="reader-text-marks.js"></script><script src="reader-annotation-model.js"></script><script src="reader-annotation-surface.js"></script><script src="reader-annotation-translation.js"></script><script src="reader-annotation-layout.js"></script><script src="reader-annotations-ui.js"></script><script src="reader-lookup-ui.js"></script><script src="reader-search.js"></script><script src="reader-workbench.js"></script><script src="reader-image-effects.js"></script><script src="reader-epub-pagination.js"></script><script src="reader-epub-anchor.js"></script><script src="reader-engines.js"></script>
-  <script src="usage-model.js"></script><script src="usage-ui.js"></script><script src="library-sort.js"></script><script src="library-sort-ui.js"></script><script src="appearance.js"></script><script src="webdav-sync-choice-session.js"></script><script src="renderer.js"></script><script src="audio-lyrics.js"></script><script src="vendor/hls.min.js"></script><script src="playback-controls.js"></script><script src="audio-import-ui.js"></script><script src="audio-context.js"></script><script src="player/audio-adapter.js"></script><script src="lyrics-editor.js"></script><script src="audio-panels.js"></script><script src="audio-capabilities.js"></script>
+  <script src="usage-model.js"></script><script src="usage-ui.js"></script><script src="library-sort.js"></script><script src="library-sort-ui.js"></script><script src="appearance.js"></script><script src="webdav-sync-choice-session.js"></script><script src="save-snapshot-association.js"></script><script src="renderer.js"></script><script src="audio-lyrics.js"></script><script src="vendor/hls.min.js"></script><script src="playback-controls.js"></script><script src="audio-import-ui.js"></script><script src="audio-context.js"></script><script src="player/audio-adapter.js"></script><script src="lyrics-editor.js"></script><script src="audio-panels.js"></script><script src="audio-capabilities.js"></script>
 <script src="audio-editor.js"></script><script src="audio-completion.js"></script><script src="player/queue-reorder.js"></script><script src="audio-browser-order.js"></script><script src="audio-browser.js"></script><script src="sidebar-ui.js"></script>
 <script src="import-drop-ui.js"></script><script src="theme-tooltips.js"></script></body>
 </html>

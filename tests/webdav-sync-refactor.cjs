@@ -90,6 +90,7 @@ test('lineage is endpoint-scoped and never reused for another WebDAV identity', 
   const endpointB = Endpoint.key({ webdavUrl: 'https://dav.example/dav/', webdavRemotePath: 'YueDen/Other', webdavUsername: 'one', webdavPassword: 'secret-a' });
   assert.equal(endpointA, endpointASame);
   assert.notEqual(endpointA, endpointB);
+  assert.equal(Endpoint.key({webdavUrl:'https://dav.example/dav/',webdavRemotePath:''}),Endpoint.key({webdavUrl:'https://dav.example/dav/',webdavRemotePath:'YueDen'}));
   const baseState = State.toBaseState(library([{ id: 'game', name: 'Game' }]));
   const record = { schemaVersion: 2, endpointKey: endpointA, baseRevision: State.syncRevision(baseState), baseState };
   const local = { ...library([{ id: 'game', name: 'Local edit' }]), lineage: record };

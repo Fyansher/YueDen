@@ -50,7 +50,7 @@ class ResourceFilters {
     }));
     const saveSelect=document.getElementById('saveFilter');if(saveSelect&&saveSelect.value&&saveSelect.value!=='all'&&!saveSelect.classList.contains('hidden')){const button=document.createElement('button');button.type='button';button.className='selected-filter-chip';button.dataset.filter='saveFilter';button.textContent='存档 · '+this.saveFilterLabel(saveSelect.value)+' ×';button.setAttribute('aria-label','取消存档筛选：'+this.saveFilterLabel(saveSelect.value));button.onclick=()=>{saveSelect.value='all';change();};host.appendChild(button);}
   }
-  render(items, onChange) {
+  render(items, onChange, unlinkedCount = 0) {
     const root = document.getElementById('filters'); if (!root) return;
     let host = document.getElementById('multiFilterControls');
     if (!host) { host = document.createElement('div'); host.id = 'multiFilterControls'; root.prepend(host); }
@@ -73,7 +73,7 @@ class ResourceFilters {
     const order=['statusFilter','platformFilter','genreFilter','categoryFilter','yearFilter','ratingFilter'];
     for(const id of order){if(id==='platformFilter'){this.renderPlatformFilter(host,items,onChange);continue;}const choices=options[id].map(value=>typeof value==='string'?{value,label:id==='ratingFilter'?(value==='unrated'?'未评分':value+' 星'):value}:value);this.renderChoiceFilter(host,id,choices,onChange);}
     this.renderCompletion(host,onChange,items);
-    this.renderSaveFilter(host,onChange,items);
+    this.renderSaveFilter(host,onChange,items,unlinkedCount);
     for(const id of ['statusFilter','platformFilter','genreFilter','categoryFilter','yearFilter','ratingFilter','completion','saveFilter']){const control=host.querySelector('[data-filter="'+id+'"]');if(control)host.appendChild(control);}
     if(!host.dataset.exclusiveMenus){host.dataset.exclusiveMenus='1';host.addEventListener('click',event=>{const summary=event.target.closest('summary');if(!summary)return;const current=summary.parentElement;host.querySelectorAll('details').forEach(menu=>{if(menu!==current)menu.open=false;});});document.addEventListener('pointerdown',event=>{if(!host.contains(event.target))host.querySelectorAll('details').forEach(menu=>menu.open=false);});}
   }
@@ -106,23 +106,24 @@ class ResourceFilters {
     for(const key of menuOptions){const choice=[...selected].find(value=>value.startsWith(key+':')),state=choice?.split(':')[1]||'',button=document.createElement('button');button.type='button';button.className='filter-option platform-filter-option'+(state?' selected':'');button.dataset.value=key;button.dataset.platformState=state==='played'?'played':state?'release':'unchecked';button.setAttribute('aria-pressed',String(Boolean(state)));button.innerHTML=PlatformModel.icons({platforms:[key],playedPlatforms:state==='played'?[key]:[]})+'<span>'+PlatformModel.labels[key]+'</span>'+(state?'<small>'+(state==='played'?'我玩过':'平台')+'</small>':'');button.title=state==='played'?'只显示标记为我玩过的平台':state?'显示拥有此平台的游戏（发行或玩过）':'点击筛选拥有此平台的游戏，再筛选我玩过的游戏';button.setAttribute('aria-label',PlatformModel.labels[key]+(state==='played'?'，我玩过':state?'，平台存在':'，未筛选'));button.onclick=event=>{event.preventDefault();event.stopPropagation();this.togglePlatform(key);onChange();};menu.appendChild(button);}
   }
   shouldShowSaveFilter(view) { return view === 'game'; }
-  saveFilterOptions() { return ['all', 'has', 'none']; }
-  saveFilterLabel(value) { return ({ all:'全部存档', has:'有存档', none:'无存档' })[value] || '全部存档'; }
+  saveFilterOptions() { return ['all', 'has', 'none', 'unlinked']; }
+  saveFilterLabel(value) { return ({ all:'全部存档', has:'有存档', none:'无存档', unlinked:'未关联存档' })[value] || '全部存档'; }
   saveFilterMatches(value, snapshotCount) {
     const count = Math.max(0, Number(snapshotCount) || 0);
     if (value === 'has') return count > 0;
     if (value === 'none') return count === 0;
+    if (value === 'unlinked') return false;
     return true;
   }
-  renderSaveFilter(host,onChange,items=[]) {
+  renderSaveFilter(host,onChange,items=[],unlinkedCount=0) {
     const select=document.getElementById('saveFilter'),visible=Boolean(select&&!select.classList.contains('hidden'));
     let details=host.querySelector('[data-filter="saveFilter"]');
     if(!visible){this.hideDropdown(details);return;}
     const selected=select.value||'all',games=items.filter(item=>item.type==='game');
-    if(!games.length&&selected==='all'){this.hideDropdown(details);return;}
+    if(!games.length&&selected==='all'&&!unlinkedCount){this.hideDropdown(details);return;}
     if(!details){details=document.createElement('details');details.className='filter-dropdown save-filter-dropdown';details.dataset.filter='saveFilter';details.innerHTML='<summary></summary><div class="filter-options" role="group" aria-label="按存档筛选"></div>';host.appendChild(details);}
     details.hidden=false;
-    const hasSnapshots=games.some(item=>this.saveFilterMatches('has',snapshotsFor(item.id).length)),hasNoSnapshots=games.some(item=>this.saveFilterMatches('none',snapshotsFor(item.id).length)),available=['all',...(hasSnapshots||selected==='has'?['has']:[]),...(hasNoSnapshots||selected==='none'?['none']:[])];details.querySelector('summary').textContent='存档 · '+this.saveFilterLabel(selected);
+    const hasSnapshots=games.some(item=>this.saveFilterMatches('has',snapshotsFor(item.id).length)),hasNoSnapshots=games.some(item=>this.saveFilterMatches('none',snapshotsFor(item.id).length)),available=['all',...(hasSnapshots||selected==='has'?['has']:[]),...(hasNoSnapshots||selected==='none'?['none']:[]),...(unlinkedCount||selected==='unlinked'?['unlinked']:[])];details.querySelector('summary').textContent='存档 · '+this.saveFilterLabel(selected);
     const menu=details.querySelector('.filter-options');menu.replaceChildren();
     for(const value of available){const button=document.createElement('button');button.type='button';button.className='filter-option'+(selected===value?' selected':'');button.dataset.value=value;button.textContent=this.saveFilterLabel(value);button.setAttribute('aria-pressed',String(selected===value));button.onclick=event=>{event.preventDefault();event.stopPropagation();select.value=value;details.open=false;onChange();};menu.appendChild(button);}
   }

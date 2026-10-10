@@ -15,9 +15,26 @@ function syncJson(value){return JSON.stringify(SyncState.toRemoteState(value));}
 
 test('InfiniCLOUD origin maps to official DAV endpoint without rewriting explicit paths', () => {
   assert.equal(Client.endpoint({ webdavUrl: 'https://ogi.teracloud.jp/', webdavRemotePath: '悦森盒' }, 'library.json').href, 'https://ogi.teracloud.jp/dav/%E6%82%A6%E6%A3%AE%E7%9B%92/library.json');
+  assert.equal(Client.endpoint({ webdavUrl: 'https://ogi.teracloud.jp/dav/', webdavRemotePath: 'YueDen' }, 'saves/catalog.json').href,'https://ogi.teracloud.jp/dav/YueDen/saves/catalog.json','configured folder prefixes every save catalogue and snapshot request under the DAV connection URL');
   assert.equal(Client.address({ webdavUrl: 'https://sample.infini-cloud.net/dav/custom/' }).pathname, '/dav/custom/');
   assert.throws(() => Client.address({ webdavUrl: 'https://host/dav/?token=x' }));
   assert.throws(() => Client.endpoint({ webdavUrl: 'https://host/dav/', webdavRemotePath: '../x' }));
+  assert.equal(Client.endpoint({ webdavUrl: 'https://ogi.teracloud.jp/dav/', webdavRemotePath: '' }, 'saves/catalog.json').href,'https://ogi.teracloud.jp/dav/YueDen/saves/catalog.json','an empty stored path uses the same YueDen folder shown by the settings UI');
+});
+
+test('empty saved remote path consistently creates and writes under the visible default directory', async () => {
+  const f=await fixture();
+  try{
+    const client=Client.create(),settings={...f.settings,webdavRemotePath:''};
+    await client.ensurePath(settings);
+    await client.ensureDirectories(settings,'saves');
+    const response=await client.request(settings,'PUT','saves/catalog.json','{}');
+    await response.body?.cancel();
+    assert.equal(response.status,201);
+    assert.equal(f.files.has('/dav/YueDen/saves/catalog.json'),true);
+    assert.equal(f.files.has('/dav/saves/catalog.json'),false);
+    assert.ok(f.requests.filter(row=>row.method==='MKCOL').every(row=>row.path.startsWith('/dav/YueDen/')));
+  }finally{await f.close();}
 });
 
 test('first sync creates each missing collection before GET and preserves conditional write', async () => {
@@ -102,6 +119,41 @@ test('oversized sync state is rejected before a second request or Range download
   assert.deepEqual(calls,[{}]);
 });
 
+test('library state above the former 1 MiB ceiling round-trips and omits legacy organizer history', async () => {
+  const value=syncState([{id:'stable-resource-id',name:'跨设备资源'}]);
+  value.settings.padding='x'.repeat(1.6*1024*1024);
+  value.organizationHistory=[{id:'legacy-operation',kind:'merge',updatedAt:'2026-01-01',before:[]}];
+  const encoded=Sync.serializeSnapshot(value);
+  const decoded=await Sync.snapshot(new Response(encoded,{status:200,headers:{'content-length':String(encoded.length)}}));
+  assert.equal(decoded.state.items[0].id,'stable-resource-id');
+  assert.equal(decoded.state.settings.padding.length,value.settings.padding.length);
+  assert.equal(Object.hasOwn(decoded.state,'organizationHistory'),false);
+  const local=SyncState.prepareLocalState({items:value.items,organizationHistory:value.organizationHistory},'device-b');
+  assert.equal(Object.hasOwn(local,'organizationHistory'),false);
+});
+
+test('legacy 1.0.7 snapshot hash validates before obsolete history is dropped', async () => {
+  const value=SyncState.toRemoteState(syncState([{id:'same-id',name:'One'}]));
+  value.organizationHistory=[{id:'old-history',kind:'merge',updatedAt:'2026-01-01',before:[{id:'old-item'}]}];
+  value.contentRevision=SyncState.contentRevision(value);
+  value.syncRevision=SyncState.syncRevision(value);
+  const bytes=require('node:zlib').gzipSync(Buffer.from(JSON.stringify(value)));
+  const decoded=await Sync.snapshot(new Response(bytes,{status:200,headers:{'content-length':String(bytes.length)}}));
+  assert.equal(decoded.state.items[0].id,'same-id');
+  assert.equal(Object.hasOwn(decoded.state,'organizationHistory'),false);
+});
+
+test('legacy common sync base is revalidated and compacted without undo history', () => {
+  const base=SyncState.toRemoteState(syncState([{id:'cross-device-id',name:'同一资源'}]));
+  base.organizationHistory=[{id:'legacy-base-history',kind:'merge',updatedAt:'2026-01-01',before:[]}];
+  const lineage={schemaVersion:2,endpointKey:'a'.repeat(64),baseRevision:Sync.contentHash(base),baseState:base};
+  const compact=SyncState.compactLineage(lineage);
+  assert.ok(compact);
+  assert.equal(Object.hasOwn(compact.baseState,'organizationHistory'),false);
+  assert.equal(compact.baseRevision,Sync.contentHash(compact.baseState));
+  assert.equal(compact.baseState.items[0].id,'cross-device-id');
+});
+
 test('idle body deadline resets after each received response chunk', async () => {
   const client=Client.create({bodyTimeout:25,fetch:async()=>new Response(new ReadableStream({async start(controller){controller.enqueue(Buffer.from('a'));await new Promise(resolve=>setTimeout(resolve,12));controller.enqueue(Buffer.from('b'));await new Promise(resolve=>setTimeout(resolve,12));controller.enqueue(Buffer.from('c'));controller.close();}}))});
   const response=await client.request({webdavUrl:'https://dav.example/dav/'},'GET','covers/asset.jpg');
@@ -172,21 +224,39 @@ test('WebDAV stat requests bypass intermediary caches when checking validators',
   } finally { await f.close(); }
 });
 
-test('WebDAV preserves read failures without retrying the request implicitly', async () => {
+test('WebDAV retries safe reads once on a fresh connection after a transient socket close', async () => {
   const f = await fixture();
   try {
     let calls = 0; const diagnostics = [];
     const client = Client.create({
       fetch: async () => {
         calls += 1;
-        if (calls === 1) { const error = new TypeError('fetch failed'); error.cause = { code: 'UND_ERR_SOCKET' }; throw error; }
-        return new Response(null, { status: 207 });
+        const error = new TypeError('fetch failed'); error.cause = { code: 'UND_ERR_SOCKET' }; throw error;
       },
       onDiagnostic: row => diagnostics.push(row)
     });
-    await assert.rejects(client.request(f.settings, 'PROPFIND', 'saves', null, '', { Depth: '0' }, undefined, false, true),/UND_ERR_SOCKET/);
+    const response = await client.request(f.settings, 'PROPFIND', '', null, '', { Depth: '0' }, undefined, true, true);
+    assert.equal(response.status, 207);
     assert.equal(calls, 1);
-    assert.equal(diagnostics.filter(row => row.event === 'webdav.request-failed').length, 1);
+    await response.body?.cancel();
+    assert.equal(f.requests.length, 1);
+    assert.equal(f.requests[0].method, 'PROPFIND');
+    assert.equal(f.requests[0].path, '/dav/');
+    assert.equal(diagnostics.filter(row => row.event === 'webdav.request-retry' && row.mode === 'fresh-connection').length, 1);
+    assert.equal(diagnostics.filter(row => row.event === 'webdav.request-failed').length, 0);
+  } finally { await f.close(); }
+});
+
+test('WebDAV does not implicitly retry writes after a socket close', async () => {
+  const f = await fixture();
+  try {
+    let freshCalls = 0;
+    const client = Client.create({
+      fetch: async () => { const error = new TypeError('fetch failed'); error.cause = { code: 'UND_ERR_SOCKET' }; throw error; },
+      freshFetch: async () => { freshCalls += 1; return new Response(null, { status: 201 }); }
+    });
+    await assert.rejects(client.request(f.settings, 'PUT', 'saves/catalog.json', '{}'), /UND_ERR_SOCKET/);
+    assert.equal(freshCalls, 0);
   } finally { await f.close(); }
 });
 

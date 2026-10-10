@@ -1,3 +1,4 @@
+(function(root) {
 'use strict';
 
 function create(scope = '') {
@@ -53,4 +54,5 @@ function clear(session) {
 
 const api = { create, update, remember, restore, values, setMode, clear };
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
-else globalThis.WebdavSyncChoiceSession = api;
+root.WebdavSyncChoiceSession = api;
+})(typeof window !== 'undefined' ? window : globalThis);

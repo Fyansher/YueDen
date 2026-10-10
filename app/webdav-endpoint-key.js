@@ -10,7 +10,7 @@ function normalizedBase(value) {
 }
 
 function normalizedRemotePath(value) {
-  const parts = String(value || '').replaceAll('\\', '/').split('/').filter(Boolean);
+  const parts = String(WebdavClient.configuredRemotePath({ webdavRemotePath: value }) || '').replaceAll('\\', '/').split('/').filter(Boolean);
   if (parts.some(part => part === '.' || part === '..')) throw Error('WebDAV 目录不能包含 . 或 ..');
   return parts.map(part => {
     try { return decodeURIComponent(part).normalize('NFC'); }

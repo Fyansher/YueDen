@@ -40,6 +40,9 @@ async function publish({
   maxConflicts = 2,
   onDiagnostic = () => {}
 }) {
+  const verifyRevision = target => require('./webdav-verification').retryRead(
+    async () => { const observed = await verify(target); return observed?.catalog?.revision === target.revision ? observed : null; }
+  );
   let remote = current || null, conflicts = 0;
   for (;;) {
     const target = merge(remote?.catalog || null, localCatalog, direction);
@@ -57,8 +60,8 @@ async function publish({
     let response;
     try { response = await put(target, conditions); }
     catch (error) {
-      const observed = await verify(target).catch(() => null);
-      if (observed?.catalog?.revision === target.revision) {
+      const observed = await verifyRevision(target).catch(() => null);
+      if (observed) {
         onDiagnostic({ event: 'webdav.save-catalog.write-confirmed-after-interruption', error });
         return { ...observed, catalog: target, uploaded: 1 };
       }
@@ -80,8 +83,8 @@ async function publish({
     const etag = response.headers.get('etag') || '';
     const lastModified = response.headers.get('last-modified') || '';
     await response.body?.cancel();
-    const observed = await verify(target);
-    if (!observed?.catalog || observed.catalog.revision !== target.revision) {
+    const observed = await verifyRevision(target);
+    if (!observed?.catalog) {
       throw Error('云端存档索引写入后回读校验不一致；快照仍保持待同步');
     }
     return {

@@ -4,7 +4,8 @@ const http=require('node:http');
 const https=require('node:https');
 const {Readable}=require('node:stream');
 function segments(value){const parts=String(value||'').replaceAll('\\','/').split('/').filter(Boolean);if(parts.some(p=>p==='.'||p==='..'))throw Error('WebDAV 目录不能包含 . 或 ..');return parts;}
-function endpoint(settings,relative='',root=false){const url=address(settings),parts=[...root?[]:segments(settings.webdavRemotePath),...segments(relative)];url.pathname+=parts.map(encodeURIComponent).join('/');return url;}
+function configuredRemotePath(settings){return String(settings?.webdavRemotePath||'').trim()||'YueDen';}
+function endpoint(settings,relative='',root=false){const url=address(settings),parts=[...root?[]:segments(configuredRemotePath(settings)),...segments(relative)];url.pathname+=parts.map(encodeURIComponent).join('/');return url;}
 function headers(settings,extra={}){return {'Accept-Encoding':'identity',...extra,...settings.webdavUsername?{Authorization:'Basic '+Buffer.from(settings.webdavUsername+':'+(settings.webdavPassword||'')).toString('base64')}: {}};}
 function failure(method,status){const detail=status===400?'请求被服务器拒绝，请核对 WebDAV 目录地址（InfiniCLOUD 使用 /dav/）':status===401?'认证失败，请核对连接 ID 和应用专用密码':status===403?'服务器拒绝访问，请核对目录权限':status===404?'远端目录或文件不存在':status===429?'服务被限流，请稍后重试':status>=500?'上游服务故障':status===412?'远端已发生变化，未覆盖，请重新同步':'HTTP 请求失败';const error=Error('WebDAV '+method+' '+detail+'（'+status+'）');error.status=status;return error;}
 async function responseDiagnostic(response){
@@ -47,6 +48,8 @@ function bodyDeadline(response, timeoutMs, method, relative) {
 }
 
 function causeCode(error){for(let current=error,depth=0;current&&depth<8;current=current.cause,depth++)if(current.code)return String(current.code);return '';}
+const SAFE_SOCKET_RETRY_METHODS=new Set(['GET','HEAD','PROPFIND']);
+const RETRYABLE_SOCKET_CODES=new Set(['UND_ERR_SOCKET','ECONNRESET','EPIPE','ECONNABORTED']);
 function causedError(message,cause,code=''){const error=Error(message,{cause});if(code)error.code=code;return error;}
 function freshConnectionFetch(url,init={}){
  const transport=url.protocol==='https:'?https:http;
@@ -70,7 +73,15 @@ function create({fetch:fetcher=globalThis.fetch,freshFetch=freshConnectionFetch,
   const operation=typeof operationSignal==='function'?operationSignal():operationSignal,signals=[signal,operation,headerController.signal].filter(Boolean),headerTimer=setTimeout(()=>{headerTimedOut=true;headerController.abort();},effectiveTimeout),combined=signals.length>1?AbortSignal.any(signals):signals[0];
   try{
    const fetchOptions={method,body,headers:requestHeaders,signal:combined,redirect:'error'};
-   const response=await (requestOptions.freshConnection?freshFetch:fetcher)(url,fetchOptions);
+   let response;
+   try{response=await (requestOptions.freshConnection?freshFetch:fetcher)(url,fetchOptions);}
+   catch(firstError){
+    const code=causeCode(firstError);
+    if(!requestOptions.freshConnection&&SAFE_SOCKET_RETRY_METHODS.has(method)&&RETRYABLE_SOCKET_CODES.has(code)&&!combined?.aborted&&!headerTimedOut){
+     report({event:'webdav.request-retry',method,resource,durationMs:Date.now()-started,attempt:2,mode:'fresh-connection',error:firstError});
+     response=await freshFetch(url,fetchOptions);
+    }else throw firstError;
+   }
    clearTimeout(headerTimer);
    const wrapped=bodyDeadline(response,Number.isFinite(bodyTimeoutMs)&&bodyTimeoutMs>0?bodyTimeoutMs:bodyTimeout,method,relative);
    if(response.status>=400||resource==='condition-probe'||resource==='sync-state'||resource==='save-manifest')report({event:'webdav.response',method,resource,status:response.status,statusText:response.statusText,durationMs:Date.now()-started,requestConditions,responseHeaders:diagnosticHeaders(response)});
@@ -84,8 +95,8 @@ function create({fetch:fetcher=globalThis.fetch,freshFetch=freshConnectionFetch,
   }
  }
  async function collection(settings,relative,root=false,options={}){const response=await request(settings,'PROPFIND',relative,null,'',{Depth:'0'},options.signal,root,true,options.timeoutMs);if(response.status===404){await response.body?.cancel();return false;}if(!response.ok){await response.body?.cancel();throw failure('PROPFIND',response.status);}const tree=xml(await xmlText(response));if(!descendants(tree,'multistatus').length||!successfulProps(tree).some(props=>descendants(props,'collection').length>0))throw Error('服务器未返回有效的 WebDAV 目录；请使用账户提供的 WebDAV 连接地址');return true;}
- async function stat(settings,relative,timeoutMs){const body='<?xml version="1.0"?><d:propfind xmlns:d="DAV:"><d:prop><d:getlastmodified/><d:getetag/><d:getcontentlength/></d:prop></d:propfind>',response=await request(settings,'PROPFIND',relative,body,'application/xml; charset=utf-8',{Depth:'0','Cache-Control':'no-cache, no-store, max-age=0',Pragma:'no-cache'},undefined,false,false,timeoutMs);if(response.status===404){await response.body?.cancel();return {exists:false,lastModified:'',etag:'',contentLength:null};}if(!response.ok){await response.body?.cancel();throw failure('PROPFIND',response.status);}const tree=xml(await xmlText(response)),props=successfulProps(tree),rawLength=property(props,'getcontentlength'),length=rawLength.trim()===''?NaN:Number(rawLength);return {exists:true,lastModified:property(props,'getlastmodified'),etag:property(props,'getetag'),contentLength:Number.isFinite(length)&&length>=0?length:null};}
- async function ensurePath(settings,options={}){if(!await collection(settings,'',true,options))throw Error('WebDAV 根目录不存在，请核对连接地址');let relative='';for(const part of segments(settings.webdavRemotePath)){relative+=(relative?'/':'')+part;const scoped={...settings,webdavRemotePath:''};if(await collection(scoped,relative,false,options))continue;const made=await request(scoped,'MKCOL',relative,null,'',{},options.signal,false,false,options.timeoutMs);await made.body?.cancel();if(!made.ok&&made.status!==405)throw failure('MKCOL',made.status);if(!await collection(scoped,relative,false,options))throw Error('WebDAV 目录创建后仍不可访问');}}
+ async function stat(settings,relative,timeoutMs,requestOptions={}){const body='<?xml version="1.0"?><d:propfind xmlns:d="DAV:"><d:prop><d:getlastmodified/><d:getetag/><d:getcontentlength/></d:prop></d:propfind>',response=await request(settings,'PROPFIND',relative,body,'application/xml; charset=utf-8',{Depth:'0','Cache-Control':'no-cache, no-store, max-age=0',Pragma:'no-cache'},undefined,false,false,timeoutMs,undefined,requestOptions);if(response.status===404){await response.body?.cancel();return {exists:false,lastModified:'',etag:'',contentLength:null};}if(!response.ok){await response.body?.cancel();throw failure('PROPFIND',response.status);}const tree=xml(await xmlText(response)),props=successfulProps(tree),rawLength=property(props,'getcontentlength'),length=rawLength.trim()===''?NaN:Number(rawLength);return {exists:true,lastModified:property(props,'getlastmodified'),etag:property(props,'getetag'),contentLength:Number.isFinite(length)&&length>=0?length:null};}
+ async function ensurePath(settings,options={}){if(!await collection(settings,'',true,options))throw Error('WebDAV 根目录不存在，请核对连接地址');let relative='';for(const part of segments(configuredRemotePath(settings))){relative+=(relative?'/':'')+part;if(await collection(settings,relative,true,options))continue;const made=await request(settings,'MKCOL',relative,null,'',{},options.signal,true,false,options.timeoutMs);await made.body?.cancel();if(!made.ok&&made.status!==405)throw failure('MKCOL',made.status);if(!await collection(settings,relative,true,options))throw Error('WebDAV 目录创建后仍不可访问');}}
  async function ensureDirectories(settings,relative,knownDirectories=new Set()){let current='';for(const part of segments(relative)){current+=(current?'/':'')+part;if(knownDirectories.has(current))continue;if(await collection(settings,current)){knownDirectories.add(current);continue;}const response=await request(settings,'MKCOL',current);await response.body?.cancel();if(!response.ok&&response.status!==405)throw failure('MKCOL',response.status);if(!await collection(settings,current))throw Error('WebDAV 子目录不可访问');knownDirectories.add(current);}}
  async function listFiles(settings,start='saves'){
   const queue=[start],queued=new Set([start]),seen=new Set(),files=new Set(),scope={base:endpoint(settings).href,origins:[address(settings).origin],root:endpoint(settings).pathname};
@@ -112,4 +123,4 @@ function create({fetch:fetcher=globalThis.fetch,freshFetch=freshConnectionFetch,
  return {request,ensurePath,ensureDirectories,listFiles,stat};
 }
 function describe(error){return ['AbortError','TimeoutError'].includes(error?.name)?'WebDAV 请求超时，当前操作已停止':error?.message||'WebDAV 同步失败';}
-module.exports={create,address,endpoint,headers,failure,responseDiagnostic,describe,resourceLabel,freshConnectionFetch};
+module.exports={create,address,endpoint,configuredRemotePath,headers,failure,responseDiagnostic,describe,resourceLabel,freshConnectionFetch};

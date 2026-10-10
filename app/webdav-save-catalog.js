@@ -33,7 +33,9 @@ function normalizeEntry(row) {
     ...(typeof source.createdAt === 'string' ? { createdAt: source.createdAt } : {}),
     ...(typeof source.note === 'string' ? { note: source.note.slice(0, 2000) } : {}),
     ...(Number.isSafeInteger(Number(source.files)) && Number(source.files) >= 0 ? { files: Number(source.files) } : {}),
-    ...(Number.isSafeInteger(Number(source.size)) && Number(source.size) >= 0 ? { size: Number(source.size) } : {})
+    ...(Number.isSafeInteger(Number(source.size)) && Number(source.size) >= 0 ? { size: Number(source.size) } : {}),
+    ...(Array.isArray(source.paths) ? { paths: [...new Set(source.paths.filter(value => typeof value === 'string' && value.length <= 8192))].slice(0, 20) } : {}),
+    ...(source.resourceIdentity && typeof source.resourceIdentity === 'object' && !Array.isArray(source.resourceIdentity) ? { resourceIdentity: source.resourceIdentity } : {})
   } : null;
   return { id, manifestRevision: String(manifestRevision), objects, ...(metadata && Object.keys(metadata).length ? { metadata } : {}) };
 }

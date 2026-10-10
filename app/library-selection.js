@@ -44,11 +44,11 @@ function renderLibrarySelection(){
  const visible=new Set(filterItems().map(i=>i.id));librarySelection.ids=new Set([...librarySelection.ids].filter(id=>visible.has(id)));
  const active=librarySelection.active,dragging=Boolean(document.querySelector('.resource-card.dragging')),ids=visibleSelectionIds(),host=$('libraryGrid'),showTools=active||dragging;
  host.classList.toggle('selection-mode',active);$('batchActions').classList.toggle('hidden',!showTools);$('batchSummary').classList.toggle('hidden',!showTools);$('batchSummary').classList.toggle('drag-only',!active&&dragging);
- const selectedSnapshots=inSnapshotSelection?snapshotSelection.size:0,allSnapshotRows=inSnapshotSelection?visibleSnapshotRows().length:0,allSelected=inSnapshotSelection?visible.size>0&&ids.length===visible.size&&selectedSnapshots===allSnapshotRows:ids.length>0&&ids.length===visible.size;
+ const selectedSnapshots=inSnapshotSelection?snapshotSelection.size:0,snapshotIds=inSnapshotSelection?visibleSnapshotRows().map(row=>row.id):[],resourceIds=[...visible],allSnapshotRows=snapshotIds.length,allSelected=inSnapshotSelection?SaveSnapshotSelection.allSelected(resourceIds,snapshotIds,librarySelection.ids,snapshotSelection):ids.length>0&&ids.length===visible.size;
  $('batchCount').textContent=inSnapshotSelection?'已选 '+ids.length+' 个资源 · '+selectedSnapshots+' 份存档':'已选 '+ids.length+' / '+visible.size;$('batchSelectAll').textContent=allSelected?'取消全选':'全选';
  $('batchDelete').disabled=inSnapshotSelection?(!ids.length&&!selectedSnapshots||librarySelection.mutation):(!ids.length||librarySelection.mutation);
  $('batchDelete').setAttribute('aria-disabled',String(inSnapshotSelection?(!ids.length&&!selectedSnapshots||librarySelection.mutation):(!ids.length||librarySelection.mutation)));$('batchDelete').title=inSnapshotSelection?'删除所选资源或存档':'删除选中的 '+ids.length+' 个条目；也可拖入卡片';
- $('batchEdit').disabled=!ids.length||librarySelection.mutation;$('batchRefresh').disabled=!ids.length||Boolean(librarySelection.refreshJob);$('batchSave').disabled=!ids.length||librarySelection.mutation||Boolean(librarySelection.saveJob);$('batchSelectAll').disabled=!visible.size;
+ $('batchEdit').disabled=!ids.length||librarySelection.mutation;$('batchRefresh').disabled=!ids.length||Boolean(librarySelection.refreshJob);$('batchSave').disabled=!ids.length||librarySelection.mutation||Boolean(librarySelection.saveJob);$('batchSelectAll').disabled=!(inSnapshotSelection?SaveSnapshotSelection.hasRows(resourceIds,snapshotIds):visible.size>0);
  $('filterToggle').setAttribute('aria-expanded',String(!$('filters').classList.contains('hidden')));
  for(const card of host.querySelectorAll('.resource-card')){
   let label=card.querySelector('.card-select');if(!active){label?.remove();card.classList.remove('is-selected');card.removeAttribute('aria-selected');continue;}
@@ -119,8 +119,8 @@ function installLibrarySelection(){
  $('filterToggle').addEventListener('click',()=>setSelectionMode(!$('filters').classList.contains('hidden')));
  $('batchSelectAll').onclick=()=>{
   if(typeof snapshotSelectionMode==='function'&&snapshotSelectionMode()){
-   const itemIds=filterItems().map(i=>i.id),saveIds=visibleSnapshotRows().map(row=>row.id),allResources=itemIds.length>0&&itemIds.every(id=>librarySelection.ids.has(id)),allSaves=saveIds.every(id=>snapshotSelection.has(id)),clear=allResources&&allSaves;
-   librarySelection.view=activeView;librarySelection.active=true;librarySelection.ids=new Set(clear?[]:itemIds);snapshotSelection=new Set(clear?[]:saveIds);snapshotAnchor=null;renderLibrarySelection();return;
+   const itemIds=filterItems().map(i=>i.id),saveIds=visibleSnapshotRows().map(row=>row.id),next=SaveSnapshotSelection.toggleAll(itemIds,saveIds,librarySelection.ids,snapshotSelection);
+   librarySelection.view=activeView;librarySelection.active=true;librarySelection.ids=new Set(next.resourceIds);snapshotSelection=new Set(next.snapshotIds);snapshotAnchor=null;renderLibrarySelection();return;
   }
   const allIds=filterItems().map(i=>i.id);librarySelection.ids=new Set(visibleSelectionIds().length===allIds.length?[]:allIds);renderLibrarySelection();
  };

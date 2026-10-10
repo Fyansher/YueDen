@@ -10,6 +10,6 @@ function install({ipcMain,dataRoot,loadLibrary,now=()=>performance.now()}){
  async function flush(){await Promise.all([...timelines].map(t=>t.flush()));await tail;}
  const decorate=library=>{const records=store.read();return {...library,items:library.items.map(item=>require('./usage-model').fill(item,records))};};
  ipcMain.handle('usage:snapshot',async()=>{await flush();return store.read();});ipcMain.handle('usage:opened',(e,id)=>update(e,id));ipcMain.handle('usage:tick',(e,id,seconds)=>update(e,id,seconds));
- return {timeline,flush,decorate,async stop(){await Promise.all([...timelines].map(t=>t.close()));await tail;await store.flush();}};
+ return {timeline,flush,decorate,exportRecords:async()=>{await flush();return store.read();},restoreRecords:async value=>{await flush();return store.replace(value||{});},async stop(){await Promise.all([...timelines].map(t=>t.close()));await tail;await store.flush();}};
 }
 module.exports={install};
