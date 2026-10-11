@@ -403,8 +403,7 @@ async function renameTagEntry(kind, oldName) {
   const categories = kind === 'category' ? (state.categories || []).map(value => value === oldName ? nextName : value) : state.categories;
   try {
     state = await native.saveLibrary({ ...state, categories, items });
-    const filter = resourceFilters.values[kind === 'category' ? 'categoryFilter' : 'genreFilter'];
-    if (filter.delete(oldName)) filter.add(nextName);
+    resourceFilters.renameTagFilter(kind === 'category' ? 'categoryFilter' : 'genreFilter', oldName, nextName);
     const oldKey = kind + ':' + oldName, newKey = kind + ':' + nextName;
     if (tagManagementSelection.delete(oldKey)) tagManagementSelection.add(newKey);
     tagManagementAnchor = tagManagementAnchor === oldKey ? newKey : tagManagementAnchor;
@@ -453,8 +452,8 @@ async function deleteTagEntries(keys = [...tagManagementSelection]) {
       return nextCategories.length === (item.categories || []).length && nextGenres.length === (item.genres || []).length ? item : { ...item, categories: nextCategories, genres: nextGenres, updatedAt: new Date().toISOString() };
     });
     state = await native.saveLibrary({ ...state, categories: (state.categories || []).filter(name => !categories.has(name)), items });
-    for (const name of categories) resourceFilters.values.categoryFilter.delete(name);
-    for (const name of genres) resourceFilters.values.genreFilter.delete(name);
+    for (const name of categories) resourceFilters.removeTagFilter('categoryFilter', name);
+    for (const name of genres) resourceFilters.removeTagFilter('genreFilter', name);
     tagManagementSelection.clear(); tagManagementAnchor = null;
     const entries = new Map();
     (state.categories || []).forEach(name => entries.set('category:' + name, true));
@@ -471,7 +470,7 @@ function renderCategories() {
   const positions = new Map([...grid.querySelectorAll('.tag-card')].map(node => [keyOf(node), node.getBoundingClientRect()]));
   const search = ($('categorySearch')?.value || '').trim().toLowerCase();
   const items = visibleResourceItems(), matched = items.filter(item => resourceFilters.matches(item));
-  const hasSelection = Object.values(resourceFilters.values).some(values => values.size) || resourceFilters.hasCompletion();
+  const hasSelection = Object.values(resourceFilters.values).some(values => values.size) || Object.values(resourceFilters.excludedValues).some(values => values.size) || resourceFilters.hasCompletion();
   const possible = new Set();
   matched.forEach(item => { (item.genres || []).forEach(tag => possible.add('genre:' + tag)); (item.categories || []).forEach(tag => possible.add('category:' + tag)); });
   const entries = new Map();
@@ -480,7 +479,7 @@ function renderCategories() {
   items.forEach(item => { (item.categories || []).forEach(name => add('category', name)); (item.genres || []).forEach(name => add('genre', name)); });
   if (settings.positiveEnergyEnabled) for (const key of [...tagManagementSelection]) if (POSITIVE_ENERGY_TAGS.has(positiveEnergyTagKey(key.slice(key.indexOf(':') + 1)))) tagManagementSelection.delete(key);
   matched.forEach(item => { (item.categories || []).forEach(name => entries.get('category:' + name).count++); (item.genres || []).forEach(name => entries.get('genre:' + name).count++); });
-  const selected = entry => resourceFilters.selected(entry.kind === 'genre' ? 'genreFilter' : 'categoryFilter').includes(entry.name);
+  const selected = entry => resourceFilters.tagMode(entry.kind === 'genre' ? 'genreFilter' : 'categoryFilter', entry.name) !== 'none';
   const prefs = tagSortPreferences(), order = readTagCardOrder([...entries.values()]), orderIndex = new Map(order.map((key, index) => [key, index]));
   grid.dataset.sortMode = prefs.field;
   const filtered = [...entries.values()].filter(entry => (selected(entry) || (!hasSelection || possible.has(tagEntryKey(entry)))) && (!tagKinds.size || tagKinds.has(entry.kind)) && (!search || entry.name.toLowerCase().includes(search)));
@@ -499,13 +498,13 @@ function renderCategories() {
     $('deleteTagSelection').onclick = () => { if (tagManagementSelection.size && !tagDeletionBusy) void deleteTagEntries(); };
   }
   grid.innerHTML = filtered.length ? filtered.map(entry => {
-    const key = tagEntryKey(entry), filterSelected = selected(entry), checked = tagManagementSelection.has(key), label = entry.kind === 'category' ? '分类' : '标签';
-    return '<article draggable="true" class="category-card tag-card' + (filterSelected ? ' selected' : '') + (checked ? ' management-selected' : '') + '" data-tag-name="' + esc(entry.name) + '" data-tag-type="' + entry.kind + '"><button type="button" class="tag-card-main" aria-pressed="' + filterSelected + '"><span class="tag-kind">' + label + '</span><strong>' + esc(entry.name) + '</strong><small>' + entry.count + ' 条匹配资源</small></button><label class="tag-card-select" title="勾选以批量管理"><input type="checkbox"' + (checked ? ' checked' : '') + '><span aria-hidden="true"></span></label></article>';
+    const key = tagEntryKey(entry), mode = resourceFilters.tagMode(entry.kind === 'genre' ? 'genreFilter' : 'categoryFilter', entry.name), filterSelected = mode === 'include', filterExcluded = mode === 'exclude', checked = tagManagementSelection.has(key), label = entry.kind === 'category' ? '分类' : '标签';
+    return '<article draggable="true" class="category-card tag-card' + (filterSelected ? ' selected' : '') + (filterExcluded ? ' filter-excluded' : '') + (checked ? ' management-selected' : '') + '" data-tag-name="' + esc(entry.name) + '" data-tag-type="' + entry.kind + '"><button type="button" class="tag-card-main" aria-pressed="' + (filterExcluded ? 'mixed' : String(filterSelected)) + '" title="' + (filterExcluded ? '排除条件，再次点击取消排除' : filterSelected ? '包含条件，再次点击切换为排除' : '点击包含，再次点击可切换为排除') + '"><span class="tag-kind">' + label + '</span><strong>' + esc(entry.name) + '</strong><small>' + entry.count + ' 条匹配资源</small></button><label class="tag-card-select" title="勾选以批量管理"><input type="checkbox"' + (checked ? ' checked' : '') + '><span aria-hidden="true"></span></label></article>';
   }).join('') : '<div class="empty-state"><h3>没有匹配的标签</h3><p>' + (search ? '当前搜索词没有匹配标签。' : '当前筛选条件下没有标签。') + '</p>' + (search ? '<button type="button" class="secondary-button" id="clearTagSearch">清除搜索</button>' : '') + '</div>';
   const clearSearch = $('clearTagSearch');
   if (clearSearch) clearSearch.onclick = () => { $('categorySearch').value = ''; renderCategories(); $('categorySearch').focus(); };
   grid.querySelectorAll('.tag-card').forEach(card => {
-    const toggle = () => { resourceFilters.toggle(card.dataset.tagType === 'genre' ? 'genreFilter' : 'categoryFilter', card.dataset.tagName); renderCategories(); [...grid.querySelectorAll('.tag-card')].find(node => keyOf(node) === keyOf(card))?.querySelector('.tag-card-main')?.focus({ preventScroll: true }); };
+    const toggle = () => { resourceFilters.toggleTag(card.dataset.tagType === 'genre' ? 'genreFilter' : 'categoryFilter', card.dataset.tagName); renderCategories(); [...grid.querySelectorAll('.tag-card')].find(node => keyOf(node) === keyOf(card))?.querySelector('.tag-card-main')?.focus({ preventScroll: true }); };
     card.querySelector('.tag-card-main').addEventListener('click', toggle);
     if (settings.appearance?.animations === false || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches || !card.animate) return;
     const before = positions.get(keyOf(card)), after = card.getBoundingClientRect();

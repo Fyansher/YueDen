@@ -123,3 +123,13 @@
  #tagStatusFilters .tag-status-options { gap:6px; }
  #tagStatusFilters .tag-kind-toggle[data-tag-kind="category"] { margin-left:4px; }
 }
+
+.filter-button.has-active-filters { color:var(--accent); border-color:var(--accent); background:color-mix(in srgb,var(--accent) 14%,var(--panel-2)); box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--accent) 38%,transparent); }
+.filter-button.has-active-filters:hover { color:var(--accent); border-color:var(--accent); background:color-mix(in srgb,var(--accent) 20%,var(--panel-2)); }
+.filter-option.excluded,.excluded-filter-chip {
+ border:1px solid var(--danger)!important;
+ background:linear-gradient(135deg,transparent 48%,color-mix(in srgb,var(--danger) 92%,transparent) 48.8%,color-mix(in srgb,var(--danger) 92%,transparent) 51.2%,transparent 52%),color-mix(in srgb,var(--danger) 9%,var(--panel-2))!important;
+}
+.filter-option.excluded:hover,.excluded-filter-chip:hover { border-color:var(--danger)!important; }
+#categoryGrid .tag-card.filter-excluded { border-color:var(--danger)!important; background:color-mix(in srgb,var(--danger) 7%,var(--panel-2)); box-shadow:inset 0 0 0 1px var(--danger); }
+#categoryGrid .tag-card.filter-excluded .tag-card-main { background:linear-gradient(135deg,transparent 48%,color-mix(in srgb,var(--danger) 92%,transparent) 48.8%,color-mix(in srgb,var(--danger) 92%,transparent) 51.2%,transparent 52%),transparent; }

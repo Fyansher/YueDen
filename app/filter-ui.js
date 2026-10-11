@@ -2,18 +2,38 @@
 class ResourceFilters {
   constructor() {
     this.values = Object.fromEntries(['statusFilter', 'platformFilter', 'genreFilter', 'categoryFilter', 'yearFilter', 'ratingFilter'].map(id => [id, new Set()]));
+    this.excludedValues = { genreFilter: new Set(), categoryFilter: new Set() };
     this.labels = { statusFilter: '状态', platformFilter: '平台', genreFilter: '标签', categoryFilter: '分类', yearFilter: '发售年份', ratingFilter: '个人评分' };
     this.completion = { mode:'range', from:'', to:'', on:'' };
   }
   selected(id) { return [...(this.values[id] || [])]; }
   toggle(id, value) { const set = this.values[id]; if (!set || value === 'all') return; set.has(value) ? set.delete(value) : set.add(value); }
+  tagMode(id, value) { return this.values[id]?.has(value) ? 'include' : this.excludedValues[id]?.has(value) ? 'exclude' : 'none'; }
+  toggleTag(id, value) {
+    if (!this.excludedValues[id] || !value) return;
+    const included = this.values[id], excluded = this.excludedValues[id];
+    if (included.has(value)) { included.delete(value); excluded.add(value); }
+    else if (excluded.has(value)) excluded.delete(value);
+    else included.add(value);
+  }
+  removeTagFilter(id, value) { this.values[id]?.delete(value); this.excludedValues[id]?.delete(value); }
+  renameTagFilter(id, oldName, newName) {
+    const mode = this.tagMode(id, oldName);
+    this.removeTagFilter(id, oldName);
+    if (mode === 'include') this.values[id].add(newName);
+    else if (mode === 'exclude') this.excludedValues[id].add(newName);
+  }
   togglePlatform(key) {
     const set=this.values.platformFilter,current=[...set].find(value=>value.startsWith(key+':'));
     if(!current)set.add(key+':any');else if(current.endsWith(':any')){set.delete(current);set.add(key+':played');}else set.delete(current);
   }
-  clearTagFilters() { this.values.genreFilter.clear(); this.values.categoryFilter.clear(); }
-  clear() { Object.values(this.values).forEach(set => set.clear()); this.completion={mode:'range',from:'',to:'',on:''}; }
+  clearTagFilters() { this.values.genreFilter.clear(); this.values.categoryFilter.clear(); Object.values(this.excludedValues).forEach(set => set.clear()); }
+  clear() { Object.values(this.values).forEach(set => set.clear()); Object.values(this.excludedValues).forEach(set => set.clear()); this.completion={mode:'range',from:'',to:'',on:''}; }
   hasCompletion() { const c=this.completion;return Boolean(c.mode==='exact'?c.on:c.from||c.to); }
+  hasActiveFilters() {
+    const saveFilter = typeof document !== 'undefined' ? document.getElementById('saveFilter') : null;
+    return Object.values(this.values).some(set => set.size) || Object.values(this.excludedValues).some(set => set.size) || this.hasCompletion() || Boolean(saveFilter && !saveFilter.classList.contains('hidden') && saveFilter.value && saveFilter.value !== 'all');
+  }
   completionLabel() {const c=this.completion;return '完成日期：'+(c.mode==='exact'?c.on:(c.from||'不限')+' 至 '+(c.to||'不限'));}
   matches(item, ignore = []) {
     if(!ignore.includes('completion') && this.hasCompletion()) {
@@ -30,8 +50,9 @@ class ResourceFilters {
     })) return false;
     const platforms=this.selected('platformFilter');
     if(!ignore.includes('platformFilter')&&platforms.length&&(!item||item.type!=='game'||!platforms.some(value=>{const [key,state]=value.split(':');const actual=PlatformModel.state(item,key);return state==='any'?actual!=='unchecked':state==='played'&&actual==='played';})))return false;
-    if (!this.selected('genreFilter').every(tag => (item.genres || []).includes(tag))) return false;
-    if (!this.selected('categoryFilter').every(tag => (item.categories || []).includes(tag))) return false;
+    const genres = item.genres || [], categories = item.categories || [];
+    if (!this.selected('genreFilter').every(tag => genres.includes(tag)) || this.excludedValues.genreFilter.size && [...this.excludedValues.genreFilter].some(tag => genres.includes(tag))) return false;
+    if (!this.selected('categoryFilter').every(tag => categories.includes(tag)) || this.excludedValues.categoryFilter.size && [...this.excludedValues.categoryFilter].some(tag => categories.includes(tag))) return false;
     if (!any('yearFilter', String(item.releaseDate || '').slice(0, 4))) return false;
     const ratings = this.selected('ratingFilter');
     return !ratings.length || ratings.some(value => value === 'unrated' ? Number(item.rating) === 0 : Number(item.rating) === Number(value));
@@ -48,6 +69,12 @@ class ResourceFilters {
       button.dataset.filter = id; button.dataset.value = value;
       button.addEventListener('click', () => { this.values[id].delete(value); change(); }); host.appendChild(button);
     }));
+    Object.entries(this.excludedValues).forEach(([id, values]) => values.forEach(value => {
+      const button = document.createElement('button'); button.type = 'button'; button.className = 'selected-filter-chip excluded-filter-chip';
+      button.textContent = value + ' ×'; button.setAttribute('aria-label', '取消排除' + this.labels[id] + '：' + value);
+      button.dataset.filter = id; button.dataset.value = value; button.dataset.mode = 'exclude';
+      button.addEventListener('click', () => { this.excludedValues[id].delete(value); change(); }); host.appendChild(button);
+    }));
     const saveSelect=document.getElementById('saveFilter');if(saveSelect&&saveSelect.value&&saveSelect.value!=='all'&&!saveSelect.classList.contains('hidden')){const button=document.createElement('button');button.type='button';button.className='selected-filter-chip';button.dataset.filter='saveFilter';button.textContent='存档 · '+this.saveFilterLabel(saveSelect.value)+' ×';button.setAttribute('aria-label','取消存档筛选：'+this.saveFilterLabel(saveSelect.value));button.onclick=()=>{saveSelect.value='all';change();};host.appendChild(button);}
   }
   render(items, onChange, unlinkedCount = 0) {
@@ -57,18 +84,49 @@ class ResourceFilters {
     let chips = document.getElementById('activeFilterChips');
     if (!chips) { chips = document.createElement('div'); chips.id = 'activeFilterChips'; chips.className = 'selected-filter-chips'; root.prepend(chips); }
     this.chips(chips, onChange);
+    const filterToggle = document.getElementById('filterToggle');
+    if (filterToggle) filterToggle.classList.toggle('has-active-filters', this.hasActiveFilters());
     const unique = values => [...new Set(values.filter(Boolean))].sort((a, b) => a.localeCompare(b, 'zh'));
-    const phases=[['pending','未开始'],['active','进行中'],['completed','已完成'],['dropped','已弃坑']],statusChoices=phases.map(([phase,label])=>({value:'phase:'+phase,label,count:items.filter(item=>StatusModel.stage(StatusModel.normalize(item.status,item.type))===phase).length})).filter(choice=>choice.count||this.values.statusFilter.has(choice.value));
+    const phases=[['pending','未开始'],['active','进行中'],['completed','已完成'],['dropped','已弃坑']],statusChoices=phases.map(([phase,label])=>({value:'phase:'+phase,label,count:items.filter(item=>StatusModel.stage(StatusModel.normalize(item.status,item.type))===phase).length})).filter(choice=>choice.count);
     const masteredCount=items.filter(item=>item.type==='game'&&StatusModel.phase(StatusModel.normalize(item.status,item.type))==='mastered').length;
-    if(masteredCount||this.values.statusFilter.has('special:mastered'))statusChoices.push({value:'special:mastered',label:'全成就',count:masteredCount});
+    if(masteredCount)statusChoices.push({value:'special:mastered',label:'全成就',count:masteredCount});
     const ratingValues=items.map(item=>Number(item.rating)).filter(value=>Number.isFinite(value)&&value>0).map(value=>String(value));
     const hasUnrated=items.some(item=>!(Number(item.rating)>0));
+    let tagPreferences = { field:'manual', direction:'asc' }, storedOrder = [], tagCountsByKind = null;
+    try {
+      const savedPreferences = JSON.parse(localStorage.getItem('tagCardSort') || 'null');
+      if (['manual','name','count'].includes(savedPreferences?.field)) tagPreferences.field = savedPreferences.field;
+      if (savedPreferences?.direction === 'desc') tagPreferences.direction = 'desc';
+      const savedOrder = JSON.parse(localStorage.getItem('tagCardOrder') || '[]');
+      if (Array.isArray(savedOrder)) storedOrder = savedOrder.filter(key => typeof key === 'string');
+    } catch {}
+    const sortTags = (id, values) => {
+      const kind = id === 'categoryFilter' ? 'category' : 'genre', direction = tagPreferences.direction === 'desc' ? -1 : 1;
+      if (tagPreferences.field === 'name') return values.sort((a,b) => a.localeCompare(b,'zh') * direction);
+      if (tagPreferences.field === 'count') {
+        if (!tagCountsByKind) {
+          tagCountsByKind = { genre:new Map(), category:new Map() };
+          for (const item of items.filter(row => this.matches(row))) {
+            for (const name of item.genres || []) tagCountsByKind.genre.set(name,(tagCountsByKind.genre.get(name)||0)+1);
+            for (const name of item.categories || []) tagCountsByKind.category.set(name,(tagCountsByKind.category.get(name)||0)+1);
+          }
+        }
+        const counts = tagCountsByKind[kind];
+        return values.sort((a,b) => ((counts.get(a) || 0) - (counts.get(b) || 0)) * direction || a.localeCompare(b,'zh'));
+      }
+      const validKeys = new Set(values.map(name => kind + ':' + name));
+      const orderedKeys = [...new Set(storedOrder.filter(key => validKeys.has(key)))];
+      const orderedSet = new Set(orderedKeys);
+      orderedKeys.push(...values.filter(name => !orderedSet.has(kind + ':' + name)).sort((a,b) => a.localeCompare(b,'zh')).map(name => kind + ':' + name));
+      const orderIndex = new Map(orderedKeys.map((key,index) => [key,index]));
+      return values.sort((a,b) => ((orderIndex.get(kind + ':' + a) ?? Number.MAX_SAFE_INTEGER) - (orderIndex.get(kind + ':' + b) ?? Number.MAX_SAFE_INTEGER)) * direction || a.localeCompare(b,'zh'));
+    };
     const options={
       statusFilter:statusChoices,
-      genreFilter:unique(items.flatMap(item=>item.genres||[])),
-      categoryFilter:unique(items.flatMap(item=>item.categories||[])),
-      yearFilter:unique(items.map(item=>String(item.releaseDate||'').slice(0,4)).filter(year=>/^\d{4}$/.test(year))).reverse(),
-      ratingFilter:[...(hasUnrated||this.values.ratingFilter.has('unrated')?['unrated']:[]),...unique(ratingValues).sort((a,b)=>Number(a)-Number(b))]
+      genreFilter:sortTags('genreFilter',unique(items.flatMap(item=>item.genres||[]))),
+      categoryFilter:sortTags('categoryFilter',unique(items.flatMap(item=>item.categories||[]))),
+      yearFilter:unique(items.map(item=>String(item.releaseDate||'').slice(0,4)).filter(year=>/^\d{4}$/.test(year))).sort((a,b)=>Number(b)-Number(a)),
+      ratingFilter:[...(hasUnrated?['unrated']:[]),...unique(ratingValues).sort((a,b)=>Number(a)-Number(b))]
     };
     const order=['statusFilter','platformFilter','genreFilter','categoryFilter','yearFilter','ratingFilter'];
     for(const id of order){if(id==='platformFilter'){this.renderPlatformFilter(host,items,onChange);continue;}const choices=options[id].map(value=>typeof value==='string'?{value,label:id==='ratingFilter'?(value==='unrated'?'未评分':value+' 星'):value}:value);this.renderChoiceFilter(host,id,choices,onChange);}
@@ -88,16 +146,25 @@ class ResourceFilters {
     if(!choices.length){this.hideDropdown(details);return;}
     details=this.ensureDropdown(host,id);const selectedValues=this.values[id],summary=details.querySelector('summary'),menu=details.querySelector('.filter-options');
     details.hidden=false;
-    summary.textContent=this.labels[id]+(selectedValues.size?' · '+selectedValues.size+' 项':' · 全部');menu.setAttribute('aria-label',this.labels[id]);
+    const selectedCount=selectedValues.size+(this.excludedValues[id]?.size||0);
+    summary.textContent=this.labels[id]+(selectedCount?' · '+selectedCount+' 项':' · 全部');menu.setAttribute('aria-label',this.labels[id]);
     const focused=menu.contains(document.activeElement)?document.activeElement.dataset.value:null,retained=new Map([...menu.querySelectorAll('button[data-value]')].map(node=>[node.dataset.value,node])),available=new Set(choices.map(choice=>choice.value));
     for(const [value,node]of retained)if(!available.has(value))node.remove();
-    for(const choice of choices){const button=retained.get(choice.value)||document.createElement('button'),selected=selectedValues.has(choice.value);button.type='button';button.dataset.value=choice.value;button.className='filter-option'+(selected?' selected':'');button.setAttribute('aria-pressed',String(selected));button.textContent=choice.label;button.disabled=Boolean(choice.count===0&&!selected);button.title=choice.count===0?'当前页面没有此状态资源':'';button.onclick=event=>{event.preventDefault();event.stopPropagation();this.toggle(id,choice.value);onChange();};if(button.parentElement!==menu)menu.appendChild(button);}
+    for(const choice of choices){
+      const button=retained.get(choice.value)||document.createElement('button'),mode=(id==='genreFilter'||id==='categoryFilter')?this.tagMode(id,choice.value):selectedValues.has(choice.value)?'include':'none';
+      button.type='button';button.dataset.value=choice.value;button.className='filter-option'+(mode==='include'?' selected':mode==='exclude'?' excluded':'');button.setAttribute('aria-pressed',mode==='exclude'?'mixed':String(mode==='include'));button.textContent=choice.label;
+      button.disabled=Boolean(choice.count===0&&!selectedValues.has(choice.value));
+      button.title=mode==='exclude'?'排除条件，再次点击取消排除':mode==='include'?'包含条件，再次点击切换为排除':choice.count===0?'当前资源中没有此条件':'点击包含，再次点击可切换为排除';
+      button.onclick=event=>{event.preventDefault();event.stopPropagation();if(id==='genreFilter'||id==='categoryFilter')this.toggleTag(id,choice.value);else this.toggle(id,choice.value);onChange();};
+      if(button.parentElement!==menu)menu.appendChild(button);
+    }
     if(focused)[...menu.querySelectorAll('button[data-value]')].find(node=>node.dataset.value===focused)?.focus({preventScroll:true});
   }
   renderPlatformFilter(host,items,onChange) {
     const games=items.filter(item=>item.type==='game'),details=host.querySelector('[data-filter="platformFilter"]');
     if(!games.length){this.hideDropdown(details);return;}
-    const menuOptions=[...new Set(games.flatMap(item=>PlatformModel.detect(item)))],selected=this.values.platformFilter;
+    const platformOrder=Object.keys(PlatformModel.labels),platformOrderIndex=new Map(platformOrder.map((key,index)=>[key,index]));
+    const menuOptions=[...new Set(games.flatMap(item=>PlatformModel.detect(item)))].sort((a,b)=>(platformOrderIndex.get(a)??Number.MAX_SAFE_INTEGER)-(platformOrderIndex.get(b)??Number.MAX_SAFE_INTEGER)||a.localeCompare(b,'zh')),selected=this.values.platformFilter;
     if(!menuOptions.length&&!selected.size){this.hideDropdown(details);return;}
     const dropdown=this.ensureDropdown(host,'platformFilter'),summary=dropdown.querySelector('summary'),menu=dropdown.querySelector('.filter-options');
     dropdown.hidden=false;

@@ -349,7 +349,7 @@
     {
       "path": "app/index.html",
       "includedInRelease": true,
-      "sha256": "3CE6480C761422048B4A50CE55D196D0DFC8CDF63FA10F015FBD41297D4BC2C5"
+      "sha256": "593FE5BA72B95E6BBB44B736727E32432B564B83B6BDDD1F149511D998164543"
     },
     {
       "path": "app/native/ResourcePicker.exe",
@@ -704,7 +704,7 @@
     {
       "path": "app/renderer.js",
       "includedInRelease": true,
-      "sha256": "A7C672A7BD38E83E24F32A45D9BB8D5E7B95D9D719083CA2AB42D9C5757FE7BE"
+      "sha256": "EC734039FF01D4A7DA591F52072DFF83C8A37F5B25B90FB7D64290B46E46141E"
     },
     {
       "path": "app/import-session-model.js",
@@ -1609,7 +1609,7 @@
     {
       "path": "app/v20-layout.css",
       "includedInRelease": true,
-      "sha256": "CB657D45DD577559F3D76DD402DFA741E40A42D08F25ECC24D41C57F7D233A17"
+      "sha256": "AB52774C869B610B66F11D1C809138A45EEA2BB549DE5FEE3544F23F3A7D9D47"
     },
     {
       "path": "app/vendor/cmaps/GBT-H.bcmap",
@@ -2534,7 +2534,7 @@
     {
       "path": "app/filter-ui.js",
       "includedInRelease": true,
-      "sha256": "F17C6EBBA2C5DA759918973941649046020D8F73174053DB90D1E0C0C5D56AEE"
+      "sha256": "20C5FB4708B9F8C94040848E8AB7EBF6394C21B56D386DFCE07CF0F0C62713A0"
     },
     {
       "path": "tests/scan-directory-preview.cjs",
