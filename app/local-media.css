@@ -39,6 +39,10 @@
 .local-root span { min-width:0; flex:1; overflow-wrap:anywhere; }.local-root button { flex-shrink:0; }
 #localRootList { color:var(--muted); font-size:13px; }#localScanWarnings { white-space:pre-line; font-size:12px; color:var(--warn); max-height:90px; overflow:auto; margin-bottom:12px; }
 .local-import-row { border:1px solid var(--line); background:var(--panel-2); border-radius:12px; padding:14px; margin:10px 0; }
+.local-import-row.has-difference,.local-import-row.has-validation-error { border-color:var(--danger)!important; background:color-mix(in srgb,var(--danger) 6%,var(--panel))!important; box-shadow:inset 3px 0 var(--danger); }
+.local-import-row.has-validation-error .local-row-meta,.local-row-validation { color:var(--danger); }
+.local-row-validation { display:block; margin:6px 0; font-size:12px; font-weight:600; }
+.local-row-validation[hidden] { display:none; }
 .local-import-row.is-scan-arriving { animation:reader-enter .35s cubic-bezier(.2,1.35,.5,1); }
 @media(prefers-reduced-motion:reduce){.local-import-row.is-scan-arriving{animation:none;}}
 .local-row-heading { display:grid; grid-template-columns:20px minmax(100px,1fr) auto 100px; align-items:center; gap:10px; }

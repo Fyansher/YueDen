@@ -384,7 +384,7 @@
     {
       "path": "app/local-media.css",
       "includedInRelease": true,
-      "sha256": "09664966F99EC7C82870C789F7C4604E648AC664944C71891103137AF3AEA0BE"
+      "sha256": "E38801A926DBA7E9D56A762E7D94C2A30526D2032BA205DBAEBC7399FBEDF40B"
     },
     {
       "path": "app/metadata-verification-window.js",
@@ -1894,7 +1894,7 @@
     {
       "path": "app/local-import-ui.js",
       "includedInRelease": true,
-      "sha256": "EF6CAF19A3CBDCE6E817305500FF235C055574D0B4ADF2E56B0BDF6AB7347816"
+      "sha256": "A2458E7A49E6E5A84E3D56520DB7659F59278D1DD5B4E46BA22622D8AD1EE946"
     },
     {
       "path": "app/player/dist/contracts.d.ts",
